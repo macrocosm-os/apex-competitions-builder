@@ -1,0 +1,45 @@
+schema: apex.competition.v1
+id: hello_world
+version: 0.1.0
+display_name: "Hello World"
+kind: solo
+process_type: cpu
+
+resources:
+  cpu_limit: 1
+  mem_limit: 512Mi
+  gpu_count: 0
+
+# NOTE: ref/digest are illustrative here. Real specs pin the digest of a signed image
+# published by the competition's own repo. `apex-dev run` will build the image locally.
+image:
+  ref: ghcr.io/macrocosm-os/apex-competition-hello-world
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+submission:
+  artifact_type: code
+  max_size_mb: 1
+  target_path: /app/submission.py
+
+input_schema:
+  $ref: ./input.schema.json
+
+defaults:
+  baseline_score: 0.0
+  baseline_raw_score: 0.0
+  round_length_in_days: 1
+  submission_reveal_days: 1
+  lower_is_better: false
+
+entrypoints:
+  # Solo eval: the image writes the submission to target_path, runs this command, and the
+  # command writes /data/result.json with {raw_score, eval_time_in_seconds, metadata}.
+  evaluate:
+    command: ["python", "/app/evaluate.py"]
+    network_disabled: true
+    allow_internet: false
+    timeout_s: 120
+
+signature:
+  cosign_identity: https://github.com/macrocosm-os/apex-competition-hello-world/.github/workflows/release.yml
+  cosign_issuer: https://token.actions.githubusercontent.com

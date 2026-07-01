@@ -1,0 +1,7 @@
+{
+  "tasks": [
+    { "task_name": "sorted_ascending", "numbers": [3, 1, 2] },
+    { "task_name": "with_negatives", "numbers": [0, -5, 10, -1] },
+    { "task_name": "single", "numbers": [42] }
+  ]
+}

@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+.mypy_cache/
+
+# Local eval artifacts produced by apex-dev run
+/data/
+result.json
+trace.jsonl
+
+# OS
+.DS_Store

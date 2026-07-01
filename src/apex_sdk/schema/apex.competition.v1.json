@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://macrocosmos.ai/apex/schema/apex.competition.v1.json",
+  "title": "apex.competition.v1",
+  "description": "Declarative, versioned description of an Apex competition. Validated platform-side by the spec syncer before an image is mirrored or a spec is activated. Stored as YAML in the apex-competitions-registry repo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "display_name",
+    "kind",
+    "process_type",
+    "resources",
+    "image",
+    "submission",
+    "input_schema",
+    "defaults",
+    "entrypoints",
+    "signature"
+  ],
+  "properties": {
+    "schema": {
+      "const": "apex.competition.v1",
+      "description": "Schema discriminator. Must be exactly 'apex.competition.v1'."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "description": "Stable competition id. Matches the registry folder and the DB competition_id key. Lowercase snake_case."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of THIS spec. (id, version) is immutable once synced."
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "kind": {
+      "enum": ["solo", "duel"],
+      "description": "solo -> one player sandbox (SoloRunner). duel -> N player sandboxes + a referee (DuelRunner)."
+    },
+    "process_type": {
+      "enum": ["cpu", "gpu"],
+      "description": "Scheduling hint. gpu specs are gated by the platform GPU opt-in pool."
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_limit", "mem_limit", "gpu_count"],
+      "properties": {
+        "cpu_limit": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Per-sandbox CPU cores. Must not exceed the per-env ceiling (stage 2, prod 4)."
+        },
+        "mem_limit": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Mi|Gi)$",
+          "description": "Per-sandbox memory as a k8s quantity (e.g. 1.5Gi, 512Mi). Floor 256Mi; ceiling stage 2Gi / prod 4Gi."
+        },
+        "gpu_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GPUs per sandbox. Must be 0 unless process_type is gpu and the env has a GPU pool."
+        }
+      }
+    },
+    "image": {
+      "$ref": "#/$defs/pinned_image",
+      "description": "The player image (kind: solo runs this alone). Pinned by digest; tags are forbidden."
+    },
+    "submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_type", "max_size_mb", "target_path"],
+      "properties": {
+        "artifact_type": {
+          "enum": ["code", "torchscript", "onnx"],
+          "description": "How the platform writes the miner's submission. code=raw source bytes, torchscript=.pt bytes, onnx=.onnx bytes."
+        },
+        "max_size_mb": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2048
+        },
+        "target_path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Absolute path inside the sandbox where the platform writes the artifact. The image entrypoint loads it."
+        }
+      }
+    },
+    "input_schema": {
+      "type": "object",
+      "description": "JSON Schema for the round input data. Either an inline schema or a $ref to a sibling file (resolved by the SDK / syncer).",
+      "properties": {
+        "$ref": { "type": "string" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_score",
+        "baseline_raw_score",
+        "round_length_in_days",
+        "submission_reveal_days",
+        "lower_is_better"
+      ],
+      "description": "Eval and scheduling parameters the worker/scheduler need to run a round. Travel with the spec version. Does NOT include incentive_weight (that is a platform / alpha-voting concern).",
+      "properties": {
+        "baseline_score": { "type": "number" },
+        "baseline_raw_score": { "type": "number" },
+        "round_length_in_days": { "type": "number", "exclusiveMinimum": 0 },
+        "submission_reveal_days": { "type": "number", "minimum": 0 },
+        "lower_is_better": { "type": "boolean" }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluate"],
+      "properties": {
+        "evaluate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "timeout_s"],
+          "description": "How the player sandbox is run. For duels, exposes the gym_v1 HTTP API so the referee can drive it.",
+          "properties": {
+            "command": { "$ref": "#/$defs/command" },
+            "network_disabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Default true. Set false for duels so players are reachable by the referee on the per-job network."
+            },
+            "allow_internet": {
+              "type": "boolean",
+              "default": false,
+              "description": "Almost always false. Egress is blocked by the sandbox regardless of network_disabled."
+            },
+            "timeout_s": { "$ref": "#/$defs/timeout_s" },
+            "http_api": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["port", "readiness_path", "protocol"],
+              "description": "Required for gym_v1 players. Describes the HTTP server the sandbox exposes.",
+              "properties": {
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "readiness_path": { "type": "string", "pattern": "^/" },
+                "protocol": { "const": "gym_v1" }
+              }
+            }
+          }
+        },
+        "generate_round": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "output_file", "timeout_s"],
+          "description": "Optional. Image-driven round generation; writes tasks to output_file.",
+          "properties": {
+            "command": { "$ref": "#/$defs/command" },
+            "output_file": { "type": "string", "pattern": "^/" },
+            "timeout_s": { "$ref": "#/$defs/timeout_s" }
+          }
+        },
+        "convert_model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "input_filename", "output_filename", "timeout_s"],
+          "description": "Optional. Post-round artifact conversion (e.g. .pt -> .onnx). Replaces the bespoke ONNX conversion job.",
+          "properties": {
+            "command": { "$ref": "#/$defs/command" },
+            "input_filename": { "type": "string" },
+            "output_filename": { "type": "string" },
+            "timeout_s": { "$ref": "#/$defs/timeout_s" }
+          }
+        }
+      }
+    },
+    "duel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "players_per_match",
+        "num_games_default",
+        "swap_sides",
+        "referee_image",
+        "referee_timeout_s"
+      ],
+      "description": "Required when kind is duel. Describes the match structure and the competition-owned referee image.",
+      "properties": {
+        "protocol": {
+          "enum": ["gym_v1", "custom"],
+          "description": "gym_v1 enforces the standard player HTTP API. custom lets the referee speak any protocol; the platform only provisions the network and waits for result.json."
+        },
+        "players_per_match": { "type": "integer", "minimum": 2 },
+        "num_games_default": { "type": "integer", "minimum": 1 },
+        "swap_sides": {
+          "type": "boolean",
+          "description": "If true, the platform reorders PLAYER_URLS across games to cancel first-mover advantage."
+        },
+        "referee_image": { "$ref": "#/$defs/pinned_image" },
+        "referee_timeout_s": { "$ref": "#/$defs/timeout_s" }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cosign_identity", "cosign_issuer"],
+      "description": "Keyless cosign identity the platform verifies the image signature against at sync time.",
+      "properties": {
+        "cosign_identity": { "type": "string", "format": "uri" },
+        "cosign_issuer": { "type": "string", "format": "uri" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "duel" } } },
+      "then": { "required": ["duel"] }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "solo" } } },
+      "then": { "not": { "required": ["duel"] } }
+    }
+  ],
+  "$defs": {
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "argv form (no shell). e.g. [\"python\", \"/app/launch.py\", \"--port\", \"8000\"]."
+    },
+    "timeout_s": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7200
+    },
+    "pinned_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "digest"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+$",
+          "description": "Registry image repository WITHOUT a tag (tags are forbidden; pin by digest)."
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "description": "Immutable image digest. This is what the platform mirrors and pins."
+        }
+      }
+    }
+  }
+}
