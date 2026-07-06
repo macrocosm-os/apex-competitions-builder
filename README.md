@@ -33,9 +33,13 @@ apex-dev --help
 apex-dev preflight --spec examples/hello-world/spec.yaml \
                    --input examples/hello-world/fixtures/input.json
 
-# Run the eval locally in Docker, exactly like the platform (executor: next milestone).
+# Run the solo eval locally in Docker, exactly like the platform. apex-dev builds the
+# player image from the Dockerfile (or pass --image <local-tag> to reuse a prebuilt one),
+# writes the submission to submission.target_path, and validates /data/result.json.
 apex-dev run --spec examples/hello-world/spec.yaml \
-             --input examples/hello-world/fixtures/input.json
+             --input examples/hello-world/fixtures/input.json \
+             --submission examples/hello-world/player/submission.py \
+             --dockerfile examples/hello-world/player/Dockerfile
 ```
 
 ## The two competition shapes

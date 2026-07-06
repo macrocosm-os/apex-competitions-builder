@@ -26,10 +26,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
+# The whole package (including schema/*.json data files) ships under src/apex_sdk.
 packages = ["src/apex_sdk"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/apex_sdk/schema" = "apex_sdk/schema"
 
 [tool.black]
 line-length = 120

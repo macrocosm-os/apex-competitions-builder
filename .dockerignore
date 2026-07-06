@@ -1,0 +1,17 @@
+# Keep the base-image build context (repo root) small and reproducible. The base
+# images only need pyproject.toml, README.md and src/.
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.mypy_cache/
+/data/
+.DS_Store

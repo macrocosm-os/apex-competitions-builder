@@ -6,23 +6,30 @@ Commands:
         (if --input is given) validate the fixture against the spec's input_schema.
         No Docker required. This is the gate designers run before opening a registry PR.
 
-    apex-dev run --spec ./spec.yaml --input fixtures/input.json [--env stage]
-        Execute the spec's eval locally in Docker (build image, launch player[/referee]
-        sandboxes, inject the platform env, wait for result.json), mirroring the platform
-        runners. [Docker executor lands in the next SDK milestone; this pass prints the
-        resolved execution plan so the contract is reviewable.]
+    apex-dev run --spec ./spec.yaml --input fixtures/input.json --submission <path>
+                 (--dockerfile <path> [--context <dir>] | --image <local-tag>) [--env stage]
+        Execute a SOLO spec's eval locally in Docker, mirroring the platform's SoloRunner:
+        write the submission to submission.target_path and the round input to
+        /data/input.json, run entrypoints.evaluate.command under the spec's resource limits
+        and network policy, then read + validate /data/result.json. Either build the player
+        image locally from --dockerfile or reuse a prebuilt local --image. Duel execution is
+        not implemented yet (prints the plan and exits 3).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from apex_sdk.spec import LoadedSpec, SpecError, load_spec
+from apex_sdk.spec import LoadedSpec, SpecError, _parse_mem_to_mi, load_spec
 
 
 def _load(spec_path: str, env: str) -> LoadedSpec:
@@ -64,17 +71,163 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     print("✓ preflight passed")
 
 
+def _die(msg: str, code: int = 1) -> "SystemExit":
+    print(f"✗ {msg}", file=sys.stderr)
+    return SystemExit(code)
+
+
+def _require_docker() -> None:
+    if shutil.which("docker") is None:
+        raise _die("docker CLI not found on PATH; apex-dev run needs Docker.", 4)
+
+
+def _mem_limit_to_docker(mem_limit: str) -> str:
+    """Convert a k8s memory quantity (e.g. 512Mi, 1.5Gi) to a docker --memory value in bytes."""
+    mi = _parse_mem_to_mi(mem_limit)
+    return f"{int(mi * 1024 * 1024)}b"
+
+
+def _build_image(dockerfile: str, context: str | None, spec: LoadedSpec) -> str:
+    df = Path(dockerfile)
+    if not df.is_file():
+        raise _die(f"--dockerfile not found: {df}", 2)
+    ctx = Path(context) if context else df.parent
+    if not ctx.is_dir():
+        raise _die(f"--context is not a directory: {ctx}", 2)
+    tag = f"apex-dev-{spec.id}:local"
+    print(f"• building player image {tag} (dockerfile={df}, context={ctx})")
+    rc, _ = _docker(["build", "-f", str(df), "-t", tag, str(ctx)])
+    if rc != 0:
+        raise _die(f"docker build failed (exit {rc})", rc or 1)
+    return tag
+
+
+def _docker(args: list[str], timeout: int | None = None) -> tuple[int, str]:
+    """Run `docker <args>`, streaming combined output to stderr; return (returncode, output).
+
+    Output is captured (not inherited) so this works under pytest's capture too. On timeout
+    a TimeoutExpired propagates to the caller after partial output is flushed.
+    """
+    try:
+        proc = subprocess.run(
+            ["docker", *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as e:
+        if e.output:
+            print(e.output, file=sys.stderr, end="")
+        raise
+    if proc.stdout:
+        print(proc.stdout, file=sys.stderr, end="")
+    return proc.returncode, proc.stdout or ""
+
+
+def _run_solo(spec: LoadedSpec, args: argparse.Namespace) -> None:
+    if not args.submission:
+        raise _die("--submission is required for a solo run (the miner artifact to evaluate).", 2)
+    submission_src = Path(args.submission)
+    if not submission_src.is_file():
+        raise _die(f"--submission not found: {submission_src}", 2)
+
+    has_dockerfile = bool(args.dockerfile)
+    has_image = bool(args.image)
+    if has_dockerfile == has_image:
+        raise _die("provide exactly one of --dockerfile or --image.", 2)
+
+    _require_docker()
+    image = _build_image(args.dockerfile, args.context, spec) if has_dockerfile else args.image
+
+    s = spec.raw
+    ep = s["entrypoints"]["evaluate"]
+    command = ep["command"]
+    timeout_s = int(ep["timeout_s"])
+    network_disabled = ep.get("network_disabled", True)
+    target_path = s["submission"]["target_path"]
+    res = s["resources"]
+
+    with tempfile.TemporaryDirectory(prefix="apex-dev-run-") as tmp:
+        tmpdir = Path(tmp)
+        data_dir = tmpdir / "data"
+        data_dir.mkdir()
+        # The image runs as a non-root user (uid 1000, like the platform sandbox); make the
+        # bind-mounted /data writable so it can write result.json on Linux hosts too.
+        data_dir.chmod(0o777)
+        (data_dir / "input.json").write_bytes(Path(args.input).read_bytes())
+        submission_host = tmpdir / "submission_artifact"
+        submission_host.write_bytes(submission_src.read_bytes())
+        result_path = data_dir / "result.json"
+
+        name = f"apex-dev-{spec.id}-{uuid.uuid4().hex[:8]}"
+        run_args = [
+            "run",
+            "--rm",
+            "--name",
+            name,
+            "--memory",
+            _mem_limit_to_docker(res["mem_limit"]),
+            "--cpus",
+            str(res["cpu_limit"]),
+            "-v",
+            f"{data_dir}:/data",
+            "-v",
+            f"{submission_host}:{target_path}:ro",
+        ]
+        if network_disabled:
+            run_args += ["--network", "none"]
+        run_args += [image, *command]
+
+        print(f"• running eval: image={image} network={'none' if network_disabled else 'default'} timeout={timeout_s}s")
+        print(f"  submission -> {target_path}, input -> /data/input.json")
+        try:
+            rc, _ = _docker(run_args, timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            subprocess.run(["docker", "kill", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            raise _die(f"eval exceeded timeout_s={timeout_s}; container killed.", 5)
+
+        if rc != 0:
+            raise _die(f"eval container exited non-zero (exit {rc}).", rc or 1)
+
+        if not result_path.is_file():
+            raise _die("eval did not write /data/result.json.", 6)
+        try:
+            result = json.loads(result_path.read_text())
+        except json.JSONDecodeError as e:
+            raise _die(f"/data/result.json is not valid JSON: {e}", 6)
+
+        _validate_solo_result(result)
+        print("\n✓ eval succeeded. result.json:")
+        print(json.dumps(result, indent=2, sort_keys=True))
+        raise SystemExit(0)
+
+
+def _validate_solo_result(result: object) -> None:
+    if not isinstance(result, dict):
+        raise _die(f"result.json must be a JSON object, got {type(result).__name__}.", 6)
+    # bool is a subclass of int/float — reject it explicitly for numeric fields.
+    for field in ("raw_score", "eval_time_in_seconds"):
+        val = result.get(field)
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            raise _die(f"result.json.{field} must be a number, got {val!r}.", 6)
+    if not isinstance(result.get("metadata"), dict):
+        raise _die(f"result.json.metadata must be an object, got {result.get('metadata')!r}.", 6)
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     spec = _load(args.spec, args.env)
     _validate_input(spec, args.input)
-    _print_plan(spec, args.env)
-    print(
-        "\n⚠ Docker execution is not wired up in this SDK milestone.\n"
-        "  This pass ships the spec/protocol contracts and the execution plan above.\n"
-        "  The full runner (build image, launch sandboxes, collect result.json) lands next.",
-        file=sys.stderr,
-    )
-    raise SystemExit(3)
+    if spec.is_duel:
+        _print_plan(spec, args.env)
+        print(
+            "\n⚠ Duel execution is not implemented in `apex-dev run` yet.\n"
+            "  The plan above shows the resolved duel contract; the multi-sandbox + referee\n"
+            "  runner lands in a later milestone. Solo runs are fully supported.",
+            file=sys.stderr,
+        )
+        raise SystemExit(3)
+    _run_solo(spec, args)
 
 
 def _print_plan(spec: LoadedSpec, env: str) -> None:
@@ -110,9 +263,13 @@ def build_parser() -> argparse.ArgumentParser:
     pf.add_argument("--env", default="stage", choices=["stage", "prod"], help="resource-ceiling env (default: stage)")
     pf.set_defaults(func=cmd_preflight)
 
-    run = sub.add_parser("run", help="run a spec's eval locally in Docker")
+    run = sub.add_parser("run", help="run a solo spec's eval locally in Docker")
     run.add_argument("--spec", required=True, help="path to spec.yaml")
     run.add_argument("--input", required=True, help="path to the round input fixture JSON")
+    run.add_argument("--submission", help="path to the miner artifact to evaluate (required for solo)")
+    run.add_argument("--dockerfile", help="build the player image from this Dockerfile (build context = --context)")
+    run.add_argument("--context", help="docker build context for --dockerfile (default: the Dockerfile's directory)")
+    run.add_argument("--image", help="use this prebuilt local image tag instead of building")
     run.add_argument("--env", default="stage", choices=["stage", "prod"], help="resource-ceiling env (default: stage)")
     run.set_defaults(func=cmd_run)
 

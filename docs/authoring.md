@@ -80,9 +80,22 @@ result to cover up a bug; let it fail.
 ## 4. Test locally
 
 ```bash
-apex-dev preflight --spec ./spec.yaml --input fixtures/input.json   # schema + fixture, no Docker
-apex-dev run       --spec ./spec.yaml --input fixtures/input.json   # full Docker run (parity with platform)
+# 1. Validate spec + input fixture. No Docker.
+apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
+
+# 2. Run the eval in Docker (solo), exactly like the platform's SoloRunner. Point at a
+#    reference submission and either build the image from a Dockerfile or reuse a local tag.
+apex-dev run --spec ./spec.yaml --input fixtures/input.json \
+             --submission ./player/submission.py \
+             --dockerfile ./player/Dockerfile          # or: --image my-player:local
 ```
+
+`apex-dev run` writes the submission to `submission.target_path`, mounts the input at
+`/data/input.json`, applies the spec's `resources` limits and network policy
+(`--network none` unless `entrypoints.evaluate.network_disabled` is false), enforces
+`timeout_s`, then reads and validates `/data/result.json`. `--build` is implicit: passing
+`--dockerfile` builds the image locally; `--context` defaults to the Dockerfile's directory.
+Duel execution in `apex-dev run` is not implemented yet (it prints the resolved plan and exits).
 
 If it passes locally it will pass the platform's sync-time validation.
 
