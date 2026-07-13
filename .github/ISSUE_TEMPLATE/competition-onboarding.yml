@@ -1,0 +1,103 @@
+name: Competition onboarding / activation
+description: Request that Macrocosmos add or update your competition in the (private) registry and activate it.
+title: "[onboarding] <competition id> v<version>"
+labels: ["competition-onboarding"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The `apex-competitions-registry` is private (it's the platform control plane), so you
+        can't PR it directly. File this issue instead — a Macrocosmos maintainer copies your
+        `spec.yaml` into the registry, reviews it, opens the registry PR, and activates it.
+
+        Before filing, make sure `apex-dev preflight` and `apex-dev run` pass locally
+        (see [docs/authoring.md](https://github.com/macrocosm-os/apex-competitions-sdk/blob/main/docs/authoring.md))
+        — if it passes locally it passes the platform's sync-time validation.
+  - type: input
+    id: competition-id
+    attributes:
+      label: Competition id
+      description: The `id:` in your spec.yaml (must equal the competition package name).
+      placeholder: battleship
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Spec version
+      description: The `version:` in your spec.yaml (semver). Bump this for every release.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: repo-url
+    attributes:
+      label: Competition repo URL
+      description: Your public competition repo (holds spec.yaml, Dockerfiles, tests).
+      placeholder: https://github.com/macrocosm-os/apex-competition-battleship
+    validations:
+      required: true
+  - type: input
+    id: released-tag
+    attributes:
+      label: Released git tag
+      description: The tag whose release CI built + signed the image (drives the cosign identity).
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: input
+    id: image-ref
+    attributes:
+      label: Image ref (no tag)
+      description: The `image.ref` from your spec.yaml.
+      placeholder: ghcr.io/macrocosm-os/apex-competition-battleship
+    validations:
+      required: true
+  - type: input
+    id: image-digest
+    attributes:
+      label: Image digest
+      description: The pinned `sha256:...` digest (registry verifies + mirrors by digest, not tag).
+      placeholder: sha256:1841b0698b137c6a7b2f5f8d71e45dc57b975567c04d212a55be585f1e3ee275
+    validations:
+      required: true
+  - type: input
+    id: referee-digest
+    attributes:
+      label: Referee image digest (duel only)
+      description: "For `kind: duel`, the referee image's pinned `sha256:...` digest. Leave blank for solo."
+      placeholder: sha256:...
+    validations:
+      required: false
+  - type: dropdown
+    id: target-env
+    attributes:
+      label: Target environment
+      description: New competitions go to stage first, then prod after validation.
+      options:
+        - stage
+        - prod
+      default: 0
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: spec.yaml
+      description: Paste your full spec.yaml (or link to it in the repo at the released tag).
+      render: yaml
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: "`apex-dev preflight --spec ./spec.yaml --input fixtures/input.json` passes"
+          required: true
+        - label: "`apex-dev run` (solo) produced a valid result.json locally"
+          required: false
+        - label: "The image is cosign keyless-signed by the repo's release workflow on the released tag"
+          required: true
+        - label: "The image is pushed and pullable by digest"
+          required: true
