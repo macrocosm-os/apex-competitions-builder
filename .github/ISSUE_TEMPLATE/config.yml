@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Authoring guide
+    url: https://github.com/macrocosm-os/apex-competitions-sdk/blob/main/docs/authoring.md
+    about: How to build, preflight, and ship a competition before requesting onboarding.

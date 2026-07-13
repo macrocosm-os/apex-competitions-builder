@@ -101,6 +101,20 @@ If it passes locally it will pass the platform's sync-time validation.
 
 ## 5. Ship it
 
+Everything you own is public: your competition repo, your `spec.yaml`, and your
+signed image. The `apex-competitions-registry` that drives the platform is **private**
+(it's the control plane — it decides which image digests are trusted and which
+competitions are live), so you don't open a PR against it directly. Instead you hand
+your artifacts to Macrocosmos, who land the registry change and activate it.
+
 1. Build + sign your image(s) with keyless cosign; push by digest.
-2. Open a PR to `apex-competitions-registry`: `competitions/<id>/<version>.yaml`.
-3. A Macrocosmos admin activates it via `active/<env>.yaml`. Stage first, then prod.
+2. **Request onboarding** — open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
+   with your competition repo URL, the released tag, and the image ref + digest. A
+   Macrocosmos maintainer copies your `spec.yaml` into the private registry
+   (`competitions/<id>/<version>.yaml`), reviews it (digest pinned, cosign identity,
+   resource ceilings), and opens the registry PR.
+3. A Macrocosmos maintainer activates it via `active/<env>.yaml`. Stage first, then prod.
+
+> Because your `spec.yaml` lives in your public repo, the maintainer copies it verbatim
+> — there's nothing to duplicate by hand. Keep it as the source of truth and bump the
+> `version` for each release.
