@@ -1,6 +1,6 @@
 # apex-referee-base
 #
-# Base image that competition REFEREE images (duel competitions) build FROM. It ships a
+# Base image that competition REFEREE images (solo and duel) build FROM. It ships a
 # Python 3.12 runtime with the apex-competition-sdk installed, so a referee image can do:
 #
 #     from apex_sdk.gym_v1 import Referee, GameResult, PlayerClient

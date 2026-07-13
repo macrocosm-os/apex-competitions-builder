@@ -18,6 +18,7 @@
     "input_schema",
     "defaults",
     "entrypoints",
+    "referee",
     "signature"
   ],
   "properties": {
@@ -42,7 +43,7 @@
     },
     "kind": {
       "enum": ["solo", "duel"],
-      "description": "solo -> one player sandbox (SoloRunner). duel -> N player sandboxes + a referee (DuelRunner)."
+      "description": "solo -> 1 player sandbox + a referee (a 1-player duel). duel -> N player sandboxes + a referee. Both isolate the miner submission (player) from the scorer (referee)."
     },
     "process_type": {
       "enum": ["cpu", "gpu"],
@@ -129,14 +130,14 @@
         "evaluate": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["command", "timeout_s"],
-          "description": "How the player sandbox is run. For duels, exposes the gym_v1 HTTP API so the referee can drive it.",
+          "required": ["command", "timeout_s", "http_api"],
+          "description": "How the PLAYER sandbox (the miner submission) is run. For BOTH solo and duel the submission runs as an isolated HTTP server that the referee reaches over the per-job network — it never shares a sandbox with the scorer.",
           "properties": {
             "command": { "$ref": "#/$defs/command" },
             "network_disabled": {
               "type": "boolean",
-              "default": true,
-              "description": "Default true. Set false for duels so players are reachable by the referee on the per-job network."
+              "default": false,
+              "description": "Default false: players must be reachable by the referee on the per-job network."
             },
             "allow_internet": {
               "type": "boolean",
@@ -148,11 +149,14 @@
               "type": "object",
               "additionalProperties": false,
               "required": ["port", "readiness_path", "protocol"],
-              "description": "Required for gym_v1 players. Describes the HTTP server the sandbox exposes.",
+              "description": "The HTTP server the player sandbox exposes for the referee to drive. Required for both solo and duel.",
               "properties": {
                 "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
                 "readiness_path": { "type": "string", "pattern": "^/" },
-                "protocol": { "const": "gym_v1" }
+                "protocol": {
+                  "enum": ["gym_v1", "custom"],
+                  "description": "Must match `referee.protocol`. gym_v1 = the standard /health,/reset,/act API; custom = a competition-defined HTTP API the referee speaks."
+                }
               }
             }
           }
@@ -182,31 +186,35 @@
         }
       }
     },
-    "duel": {
+    "referee": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "protocol",
-        "players_per_match",
-        "num_games_default",
-        "swap_sides",
-        "referee_image",
-        "referee_timeout_s"
-      ],
-      "description": "Required when kind is duel. Describes the match structure and the competition-owned referee image.",
+      "required": ["protocol", "image", "timeout_s"],
+      "description": "The competition-owned scorer sandbox — REQUIRED for both solo and duel (a solo eval is a 1-player duel). Holds the game engine + scoring; the platform drives the player(s) through it. The referee image runs by the convention entrypoint /app/referee.py.",
       "properties": {
         "protocol": {
           "enum": ["gym_v1", "custom"],
-          "description": "gym_v1 enforces the standard player HTTP API. custom lets the referee speak any protocol; the platform only provisions the network and waits for result.json."
+          "description": "gym_v1 enforces the standard player HTTP API (/health,/reset,/act). custom lets the referee speak any HTTP the players expose; the platform only provisions the network and waits for result.json. Must match entrypoints.evaluate.http_api.protocol."
         },
+        "image": {
+          "$ref": "#/$defs/pinned_image",
+          "description": "The referee/scorer image. Pinned by digest; mirrored + cosign-verified at sync time like the player image."
+        },
+        "timeout_s": { "$ref": "#/$defs/timeout_s" }
+      }
+    },
+    "duel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["players_per_match", "num_games_default", "swap_sides"],
+      "description": "Required when kind is duel — the match structure only (the scorer lives in the shared `referee` block). Omitted for solo, which is implicitly 1 player / 1 game.",
+      "properties": {
         "players_per_match": { "type": "integer", "minimum": 2 },
         "num_games_default": { "type": "integer", "minimum": 1 },
         "swap_sides": {
           "type": "boolean",
           "description": "If true, the platform reorders PLAYER_URLS across games to cancel first-mover advantage."
-        },
-        "referee_image": { "$ref": "#/$defs/pinned_image" },
-        "referee_timeout_s": { "$ref": "#/$defs/timeout_s" }
+        }
       }
     },
     "signature": {

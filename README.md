@@ -56,7 +56,7 @@ protocol contracts (with docstrings).
 
 ## How a competition ships
 
-1. Fork the example competition repo; implement your player (and referee, for duels).
+1. Fork the example competition repo; implement your player and referee images.
 2. `apex-dev preflight` and `apex-dev run` until it passes locally.
 3. Build + sign your image(s) (keyless cosign) and push to your registry.
 4. Open a PR to `apex-competitions-registry` adding `competitions/<id>/<version>.yaml`.

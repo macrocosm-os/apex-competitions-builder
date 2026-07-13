@@ -12,8 +12,9 @@ resources:
 
 # NOTE: ref/digest are illustrative here. Real specs pin the digest of a signed image
 # published by the competition's own repo. `apex-dev run` will build the image locally.
+# `image` is the PLAYER image (the miner submission server).
 image:
-  ref: ghcr.io/macrocosm-os/apex-competition-hello-world
+  ref: ghcr.io/macrocosm-os/apex-competition-hello-world-player
   digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
 
 submission:
@@ -32,13 +33,26 @@ defaults:
   lower_is_better: false
 
 entrypoints:
-  # Solo eval: the image writes the submission to target_path, runs this command, and the
-  # command writes /data/result.json with {raw_score, eval_time_in_seconds, metadata}.
+  # A solo eval is a 1-player duel. `evaluate` runs the PLAYER sandbox: the miner submission
+  # is mounted at target_path and served as an HTTP API that the referee drives.
   evaluate:
-    command: ["python", "/app/evaluate.py"]
-    network_disabled: true
+    command: ["python", "/app/launch.py", "--port", "8000"]
+    network_disabled: false   # the referee must reach the player on the per-job network
     allow_internet: false
     timeout_s: 120
+    http_api:
+      port: 8000
+      readiness_path: /health
+      protocol: gym_v1
+
+# The competition-owned scorer sandbox (holds the game engine + scoring). Runs /app/referee.py,
+# drives the player over the network, and writes /data/result.json. Isolated from the submission.
+referee:
+  protocol: gym_v1
+  image:
+    ref: ghcr.io/macrocosm-os/apex-competition-hello-world-referee
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  timeout_s: 120
 
 signature:
   cosign_identity: https://github.com/macrocosm-os/apex-competition-hello-world/.github/workflows/release.yml

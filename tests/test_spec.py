@@ -38,14 +38,14 @@ def test_duel_requires_duel_block():
 
 def test_solo_forbids_duel_block():
     base = _minimal_solo()
-    base["duel"] = {
-        "protocol": "gym_v1",
-        "players_per_match": 2,
-        "num_games_default": 1,
-        "swap_sides": True,
-        "referee_image": {"ref": "ghcr.io/x/y", "digest": "sha256:" + "0" * 64},
-        "referee_timeout_s": 60,
-    }
+    base["duel"] = {"players_per_match": 2, "num_games_default": 1, "swap_sides": True}
+    with pytest.raises(SpecError):
+        validate_dict(base)
+
+
+def test_referee_block_required():
+    base = _minimal_solo()
+    del base["referee"]  # referee is required for both solo and duel
     with pytest.raises(SpecError):
         validate_dict(base)
 
@@ -87,7 +87,18 @@ def _minimal_solo() -> dict:
             "submission_reveal_days": 1,
             "lower_is_better": False,
         },
-        "entrypoints": {"evaluate": {"command": ["python", "/app/evaluate.py"], "timeout_s": 60}},
+        "entrypoints": {
+            "evaluate": {
+                "command": ["python", "/app/launch.py", "--port", "8000"],
+                "timeout_s": 60,
+                "http_api": {"port": 8000, "readiness_path": "/health", "protocol": "gym_v1"},
+            }
+        },
+        "referee": {
+            "protocol": "gym_v1",
+            "image": {"ref": "ghcr.io/x/referee", "digest": "sha256:" + "0" * 64},
+            "timeout_s": 60,
+        },
         "signature": {
             "cosign_identity": "https://github.com/x/y/.github/workflows/release.yml",
             "cosign_issuer": "https://token.actions.githubusercontent.com",

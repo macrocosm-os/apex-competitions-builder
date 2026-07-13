@@ -4,13 +4,17 @@ This walks through building a competition from scratch and getting it live.
 
 ## 1. Choose a shape
 
-**Solo** — miners are scored independently against round input. One sandbox per submission.
-Use this when a submission's quality can be measured without another player (compression,
-prediction, optimization, single-agent RL).
+Every competition runs the miner submission in an isolated **player** sandbox and scores it
+from a separate, competition-owned **referee** sandbox — the submission and your scoring logic
+never share a sandbox, so a submission can't read/patch the scorer or fabricate its result.
+You always author two images: a player and a referee.
 
-**Duel** — submissions play against each other. N player sandboxes speak the `gym_v1` HTTP
-protocol; a referee image you own holds the rules and reports the result. Use this for
-games and any head-to-head evaluation.
+**Solo** — miners are scored independently against round input (a **1-player duel**). Use this
+when quality can be measured without another player (compression, prediction, optimization,
+single-agent RL). One player sandbox + one referee.
+
+**Duel** — submissions play against each other. N player sandboxes + one referee that holds the
+rules. Use this for games and any head-to-head evaluation.
 
 ## 2. Write the spec
 
@@ -21,31 +25,26 @@ Copy `examples/hello-world/spec.yaml` and edit it. The full contract is in
 - `kind` — `solo` or `duel`.
 - `resources` — per-sandbox `cpu_limit`, `mem_limit`, `gpu_count`. Must fit the env ceilings
   (stage: 2 CPU / 2Gi; prod: 4 CPU / 4Gi; memory floor 256Mi). GPUs are gated by the platform.
-- `image` — your player image, **pinned by digest** (tags are forbidden).
+- `image` — your **player** image, **pinned by digest** (tags are forbidden).
 - `submission` — `artifact_type` (`code` | `torchscript` | `onnx`), `max_size_mb`, and the
-  `target_path` where the platform writes the miner's artifact for your entrypoint to load.
+  `target_path` where the platform writes the miner's artifact for your player to load.
 - `input_schema` — a JSON Schema (inline or `$ref`) for the round input. Emit it from your
   pydantic model rather than hand-writing it.
 - `defaults` — eval/scheduling knobs: baselines, round length, reveal window, `lower_is_better`.
-- `entrypoints.evaluate` — how the player sandbox runs. For duels, add `http_api` (port,
-  readiness_path, `protocol: gym_v1`). Optional `generate_round` and `convert_model` entrypoints.
-- `duel` — required for duels: `players_per_match`, `num_games_default`, `swap_sides`, and your
-  `referee_image` (also digest-pinned) + `referee_timeout_s`.
-- `signature` — the keyless cosign identity the platform verifies your image against.
+- `entrypoints.evaluate` — how the **player** sandbox runs, including `http_api` (port,
+  `readiness_path`, `protocol`) — **required for both solo and duel**. Optional `generate_round`
+  and `convert_model` entrypoints.
+- `referee` — **required for both solo and duel**: `protocol` (`gym_v1` | `custom`), your
+  `image` (digest-pinned, like the player), and `timeout_s`. The referee runs by convention at
+  `/app/referee.py`.
+- `duel` — required for duels only: `players_per_match`, `num_games_default`, `swap_sides`.
+- `signature` — the keyless cosign identity the platform verifies your images against.
 
 ## 3. Implement the image(s)
 
-### Solo
-Your image writes nothing special — its `evaluate` command loads the submission from
-`target_path`, reads the round input, and writes `/data/result.json`:
+Both solo and duel need a **player** image and a **referee** image (see
+`examples/hello-world/player/` and `.../referee/`). Solo is just a 1-player duel.
 
-```json
-{ "raw_score": 0.87, "eval_time_in_seconds": 12.3, "metadata": {} }
-```
-
-See `examples/hello-world/player/evaluate.py`.
-
-### Duel (gym_v1)
 **Player** — wrap the submission in a `Player` and serve it:
 
 ```python
@@ -83,21 +82,18 @@ result to cover up a bug; let it fail.
 # 1. Validate spec + input fixture. No Docker.
 apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
 
-# 2. Run the eval in Docker (solo), exactly like the platform's SoloRunner. Point at a
-#    reference submission and either build the image from a Dockerfile or reuse a local tag.
+# 2. Resolve + preview the run contract (player + referee, resources, protocol).
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
              --submission ./player/submission.py \
              --dockerfile ./player/Dockerfile          # or: --image my-player:local
 ```
 
-`apex-dev run` writes the submission to `submission.target_path`, mounts the input at
-`/data/input.json`, applies the spec's `resources` limits and network policy
-(`--network none` unless `entrypoints.evaluate.network_disabled` is false), enforces
-`timeout_s`, then reads and validates `/data/result.json`. `--build` is implicit: passing
-`--dockerfile` builds the image locally; `--context` defaults to the Dockerfile's directory.
-Duel execution in `apex-dev run` is not implemented yet (it prints the resolved plan and exits).
-
-If it passes locally it will pass the platform's sync-time validation.
+`apex-dev preflight` validates the spec against `apex.competition.v1` (including the ceilings)
+and your input fixture against `input_schema` — a spec that passes preflight is one the platform
+will accept at sync time. `apex-dev run` validates the args and prints the resolved plan
+(player + referee images, protocol, resources); **referee-driven local execution (spinning up the
+player + referee sandboxes on a shared network) is not implemented yet** and exits 3 — run on
+stage to execute. A local 2-sandbox harness is a follow-up.
 
 ## 5. Ship it
 

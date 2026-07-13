@@ -42,15 +42,19 @@ def _minimal_duel() -> dict:
             "submission_reveal_days": 1,
             "lower_is_better": False,
         },
-        "entrypoints": {"evaluate": {"command": ["python", "/app/launch.py"], "timeout_s": 60}},
-        "duel": {
-            "protocol": "gym_v1",
-            "players_per_match": 2,
-            "num_games_default": 1,
-            "swap_sides": True,
-            "referee_image": {"ref": "ghcr.io/x/ref", "digest": "sha256:" + "0" * 64},
-            "referee_timeout_s": 60,
+        "entrypoints": {
+            "evaluate": {
+                "command": ["python", "/app/launch.py", "--port", "8000"],
+                "timeout_s": 60,
+                "http_api": {"port": 8000, "readiness_path": "/health", "protocol": "gym_v1"},
+            }
         },
+        "referee": {
+            "protocol": "gym_v1",
+            "image": {"ref": "ghcr.io/x/ref", "digest": "sha256:" + "0" * 64},
+            "timeout_s": 60,
+        },
+        "duel": {"players_per_match": 2, "num_games_default": 1, "swap_sides": True},
         "signature": {
             "cosign_identity": "https://github.com/x/y/.github/workflows/release.yml",
             "cosign_issuer": "https://token.actions.githubusercontent.com",
@@ -124,8 +128,10 @@ def test_run_parser_has_expected_flags():
     assert args.context == "c"
 
 
-@pytest.mark.skipif(not _HAS_DOCKER, reason="docker not available")
-def test_solo_end_to_end_reference_submission(capsys):
+def test_solo_run_is_referee_driven_exits_3(capsys):
+    # A solo eval is now a 1-player duel (player + referee sandboxes). With valid args, the
+    # local run reports that referee-driven execution isn't implemented in apex-dev yet (exit 3),
+    # rather than running the old insecure single-sandbox model.
     code = _run(
         [
             "run",
@@ -139,9 +145,5 @@ def test_solo_end_to_end_reference_submission(capsys):
             str(DOCKERFILE),
         ]
     )
-    assert code == 0, "solo run should succeed for the reference submission"
-    out = capsys.readouterr().out
-    # The result block is printed to stdout; the reference submission sorts correctly.
-    result = json.loads(out[out.index("{") : out.rindex("}") + 1])
-    assert result["raw_score"] == 1.0
-    assert isinstance(result["metadata"], dict)
+    assert code == 3
+    assert "referee" in (capsys.readouterr().err.lower())

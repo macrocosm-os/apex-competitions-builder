@@ -218,16 +218,29 @@ def _validate_solo_result(result: object) -> None:
 def cmd_run(args: argparse.Namespace) -> None:
     spec = _load(args.spec, args.env)
     _validate_input(spec, args.input)
-    if spec.is_duel:
-        _print_plan(spec, args.env)
-        print(
-            "\n⚠ Duel execution is not implemented in `apex-dev run` yet.\n"
-            "  The plan above shows the resolved duel contract; the multi-sandbox + referee\n"
-            "  runner lands in a later milestone. Solo runs are fully supported.",
-            file=sys.stderr,
-        )
-        raise SystemExit(3)
-    _run_solo(spec, args)
+    # Every competition is now referee-driven: the miner submission runs in an isolated player
+    # sandbox and the competition-owned referee sandbox scores it (a solo eval is a 1-player
+    # duel). For solo we still validate the player args so mistakes surface as exit 2.
+    if not spec.is_duel:
+        _validate_solo_args(args)
+    _print_plan(spec, args.env)
+    print(
+        "\n⚠ Referee-driven local run (player + referee sandboxes on a shared network) is not\n"
+        "  implemented in `apex-dev run` yet. `apex-dev preflight` + the plan above validate the\n"
+        "  full contract; run on stage to execute. A local 2-sandbox harness is a follow-up.",
+        file=sys.stderr,
+    )
+    raise SystemExit(3)
+
+
+def _validate_solo_args(args: argparse.Namespace) -> None:
+    """Validate the player-run args for a solo spec (exit 2 on error)."""
+    if not args.submission:
+        raise _die("--submission is required for a solo run (the miner artifact to evaluate).", 2)
+    if not Path(args.submission).is_file():
+        raise _die(f"--submission not found: {args.submission}", 2)
+    if bool(args.dockerfile) == bool(args.image):
+        raise _die("provide exactly one of --dockerfile or --image.", 2)
 
 
 def _print_plan(spec: LoadedSpec, env: str) -> None:
@@ -241,16 +254,18 @@ def _print_plan(spec: LoadedSpec, env: str) -> None:
         f"  resources      : cpu={s['resources']['cpu_limit']} mem={s['resources']['mem_limit']} "
         f"gpu={s['resources']['gpu_count']} (env={env})"
     )
-    print(f"  evaluate cmd   : {ep['command']}")
-    print(f"  evaluate to    : {ep['timeout_s']}s")
+    print(f"  player cmd     : {ep['command']}")
+    print(f"  player to      : {ep['timeout_s']}s")
+    r = s["referee"]
+    print(f"  referee proto  : {r['protocol']}")
+    print(f"  referee image  : {r['image']['ref']}@{r['image']['digest']}")
+    print(f"  referee to     : {r['timeout_s']}s")
     if spec.is_duel:
         d = s["duel"]
         print(
-            f"  duel protocol  : {d['protocol']} ({d['players_per_match']} players, "
-            f"{d['num_games_default']} games, swap_sides={d['swap_sides']})"
+            f"  duel match     : {d['players_per_match']} players, "
+            f"{d['num_games_default']} games, swap_sides={d['swap_sides']}"
         )
-        print(f"  referee image  : {d['referee_image']['ref']}@{d['referee_image']['digest']}")
-        print(f"  referee to     : {d['referee_timeout_s']}s")
 
 
 def build_parser() -> argparse.ArgumentParser:
