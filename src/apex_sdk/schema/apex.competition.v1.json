@@ -103,6 +103,23 @@
         "$ref": { "type": "string" }
       }
     },
+    "screening": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Layer-1 screening config for the GENERIC platform screener (no competition code). Optional — sensible defaults apply. Keyed by submission.artifact_type: `code` uses the ASTGuard knobs, `torchscript`/`onnx` use the weights-validator knobs. Forbidden-lists are a tripwire, not the boundary (the sandbox is the actual defense), so it is fine that they are visible in the spec.",
+      "properties": {
+        "max_size_mb": { "type": "number", "exclusiveMinimum": 0, "description": "Reject submissions larger than this (code and model)." },
+        "extra_forbidden_modules": { "type": "array", "items": { "type": "string" }, "description": "code: modules banned on top of the base ASTGuard set." },
+        "extra_forbidden_calls": { "type": "array", "items": { "type": "string" }, "description": "code: bare calls banned on top of the base set." },
+        "extra_forbidden_attr_calls": { "type": "array", "items": { "type": "string" }, "description": "code: attribute calls (e.g. os.open) banned on top of the base set." },
+        "extra_forbidden_attrs_by_module": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "code: module -> banned attribute names." },
+        "extra_forbidden_dunder_attrs": { "type": "array", "items": { "type": "string" }, "description": "code: dunder attributes banned on top of the base set." },
+        "extra_forbidden_attr_access": { "type": "array", "items": { "type": "string" }, "description": "code: attribute accesses (e.g. sys.modules) to block." },
+        "block_dynamic_getattr": { "type": "boolean", "description": "code: reject dynamic getattr/setattr." },
+        "min_weight_bytes": { "type": "integer", "minimum": 0, "description": "model: minimum total tensor-weight bytes (rejects zero-weight heuristics)." },
+        "max_code_weight_ratio": { "type": "number", "exclusiveMinimum": 0, "description": "model: max code:weight size ratio (rejects logic-in-code exploits)." }
+      }
+    },
     "defaults": {
       "type": "object",
       "additionalProperties": false,
@@ -181,6 +198,17 @@
             "command": { "$ref": "#/$defs/command" },
             "input_filename": { "type": "string" },
             "output_filename": { "type": "string" },
+            "timeout_s": { "$ref": "#/$defs/timeout_s" }
+          }
+        },
+        "screen": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image", "command", "timeout_s"],
+          "description": "Optional Layer-2 BEHAVIOURAL screener (bespoke checks beyond the generic Layer-1). Runs in its OWN image so secret checks stay private while the player image can be public. The submission is written to submission.target_path and the round input is provided the same way as evaluate; exit 0 = pass, non-zero = fail.",
+          "properties": {
+            "image": { "$ref": "#/$defs/pinned_image" },
+            "command": { "$ref": "#/$defs/command" },
             "timeout_s": { "$ref": "#/$defs/timeout_s" }
           }
         }

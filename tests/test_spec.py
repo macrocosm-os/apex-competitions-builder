@@ -104,3 +104,35 @@ def _minimal_solo() -> dict:
             "cosign_issuer": "https://token.actions.githubusercontent.com",
         },
     }
+
+
+def test_screening_block_optional_and_valid():
+    # Layer-1 screening is optional (defaults apply) ...
+    base = _minimal_solo()
+    validate_dict(base)  # no screening block -> valid
+    # ... and a configured block validates.
+    base["screening"] = {
+        "max_size_mb": 1,
+        "extra_forbidden_modules": ["socket", "subprocess"],
+        "extra_forbidden_attrs_by_module": {"os": ["open", "system"]},
+        "min_weight_bytes": 10240,
+        "max_code_weight_ratio": 10,
+    }
+    validate_dict(base)
+
+
+def test_screening_rejects_unknown_field():
+    base = _minimal_solo()
+    base["screening"] = {"bogus_knob": True}
+    with pytest.raises(SpecError):
+        validate_dict(base)
+
+
+def test_screen_entrypoint_valid_layer2():
+    base = _minimal_solo()
+    base["entrypoints"]["screen"] = {
+        "image": {"ref": "ghcr.io/x/screener", "digest": "sha256:" + "0" * 64},
+        "command": ["python", "/app/screen.py"],
+        "timeout_s": 120,
+    }
+    validate_dict(base)

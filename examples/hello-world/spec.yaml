@@ -22,6 +22,9 @@ submission:
   max_size_mb: 1
   target_path: /app/submission.py
 
+screening:            # Layer-1 generic screener config (code artifact_type -> ASTGuard)
+  max_size_mb: 1
+  extra_forbidden_modules: [socket, subprocess]
 input_schema:
   $ref: ./input.schema.json
 
