@@ -18,6 +18,7 @@ as the platform would.
 | `src/apex_sdk/dev/cli.py` | `apex-dev` — `preflight` and `run` your spec locally. |
 | `examples/hello-world/` | A minimal solo competition: spec, input schema, fixture, reference submission. |
 | `images/` | Base image Dockerfiles (`player-base`, `referee-base`). |
+| `skills/apex-competition-builder/` | Design guide + agent skill for authoring a competition end-to-end: submission-format doctrine, evaluation sizing, anti-exploit checklist, onboarding manifest. |
 
 ## Install
 
