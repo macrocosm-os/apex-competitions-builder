@@ -64,22 +64,15 @@ body:
   - type: input
     id: referee-digest
     attributes:
-      label: Referee image digest (duel only)
-      description: "For `kind: duel`, the referee image's pinned `sha256:...` digest. Leave blank for solo."
+      label: Referee image digest
+      description: The referee image's pinned `sha256:...` digest (required for both `kind: solo` and `kind: duel`).
       placeholder: sha256:...
     validations:
-      required: false
-  - type: dropdown
-    id: target-env
-    attributes:
-      label: Target environment
-      description: New competitions go to stage first, then prod after validation.
-      options:
-        - stage
-        - prod
-      default: 0
-    validations:
       required: true
+  - type: markdown
+    attributes:
+      value: |
+        **Target environment:** `stage`. New competitions go to stage first, then prod after validation.
   - type: textarea
     id: spec
     attributes:
