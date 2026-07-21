@@ -4,11 +4,9 @@ The argument-parsing / duel tests need no Docker. The end-to-end test builds the
 hello-world player image and runs it, so it is skipped when docker is unavailable.
 """
 
-import json
 import shutil
 from pathlib import Path
 
-import pytest
 import yaml
 
 from apex_sdk.dev.cli import main
