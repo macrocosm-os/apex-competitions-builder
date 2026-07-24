@@ -130,6 +130,8 @@ Full contracts with docstrings live in the SDK (`src/apex_sdk/gym_v1/`, `docs/au
 - **Deterministic**: same (submission, round input, seed) → same score. Pin model revisions by full SHA, dataset files by content hash, dependency versions exactly. Score drift between versions is indistinguishable from cheating and will be treated as an incident.
 - Budget `referee.timeout_s` and `evaluate.timeout_s` explicitly; the sandbox is killed without grace at the limit.
 
+**Custom protocol** — if `http_api.protocol: custom`, your player serves whatever HTTP API your referee speaks (not `/reset`,`/act`) and your referee drives it directly, so you don't use gym_v1's `Player`/`serve`/`PlayerClient`. You still cross the same platform boundary, though: parse the injected env with `RefereeContext.from_env()` and write `/data/result.json` as a `GameResult` — both are protocol-agnostic, so use them instead of hand-rolling the env parsing and result shape.
+
 **Screening** — two layers, neither is partner Python in the platform:
 
 - *Layer 1 (declarative)*: the `screening` block in your spec configures the platform's generic screener — AST bans for `code` (`extra_forbidden_modules`, `extra_forbidden_calls`, …) or the weights validator for `torchscript`/`onnx`, plus `max_size_mb`. It's a tripwire, not the boundary — the sandbox is the actual defense, so it's fine that it's visible in the spec.
