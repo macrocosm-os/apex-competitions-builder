@@ -33,7 +33,7 @@ body:
     id: repo-url
     attributes:
       label: Competition repo URL
-      description: Your public competition repo (holds spec.yaml, Dockerfiles, tests).
+      description: Your competition repo (public or private; holds spec.yaml, Dockerfiles, tests).
       placeholder: https://github.com/macrocosm-os/apex-competition-battleship
     validations:
       required: true
