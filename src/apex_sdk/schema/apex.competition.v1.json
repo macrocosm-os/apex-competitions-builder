@@ -43,7 +43,7 @@
     },
     "kind": {
       "enum": ["solo", "duel"],
-      "description": "solo -> 1 player sandbox + a referee (a 1-player duel). duel -> N player sandboxes + a referee. Both isolate the miner submission (player) from the scorer (referee)."
+      "description": "solo -> the miner submission runs in its own player sandbox(es) + a referee (a 1-player duel); one player sandbox by default, or N isolated sandboxes of the SAME submission via the optional `solo.player_sandboxes`. duel -> N player sandboxes of DIFFERENT submissions + a referee. Both isolate the miner submission (player) from the scorer (referee)."
     },
     "process_type": {
       "enum": ["cpu", "gpu"],
@@ -231,11 +231,24 @@
         "timeout_s": { "$ref": "#/$defs/timeout_s" }
       }
     },
+    "solo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["player_sandboxes"],
+      "description": "Optional, solo only. Overrides the default single player sandbox. The platform provisions `player_sandboxes` isolated sandboxes, each running a fresh copy of the SAME submission (its own memory and filesystem, no shared state), and injects that many PLAYER_URLS into the referee in canonical order. Use when the evaluation must run distinct phases of one submission in mutually-isolated processes — e.g. a compressor sandbox and a decompressor sandbox that must not pass state to each other. Omit for the usual 1-sandbox solo. Forbidden for duel (use `duel.players_per_match`).",
+      "properties": {
+        "player_sandboxes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of isolated sandboxes the single submission is mounted into. Default 1 (omit the block). >1 gives the referee that many PLAYER_URLS for the same submission with no shared state between them; NUM_PLAYERS is set to match."
+        }
+      }
+    },
     "duel": {
       "type": "object",
       "additionalProperties": false,
       "required": ["players_per_match", "num_games_default", "swap_sides"],
-      "description": "Required when kind is duel — the match structure only (the scorer lives in the shared `referee` block). Omitted for solo, which is implicitly 1 player / 1 game.",
+      "description": "Required when kind is duel — the match structure only (the scorer lives in the shared `referee` block). Omitted for solo, which is 1 player / 1 game unless `solo.player_sandboxes` requests more isolated sandboxes of the same submission.",
       "properties": {
         "players_per_match": { "type": "integer", "minimum": 2 },
         "num_games_default": { "type": "integer", "minimum": 1 },
@@ -259,7 +272,7 @@
   "allOf": [
     {
       "if": { "properties": { "kind": { "const": "duel" } } },
-      "then": { "required": ["duel"] }
+      "then": { "required": ["duel"], "not": { "required": ["solo"] } }
     },
     {
       "if": { "properties": { "kind": { "const": "solo" } } },
