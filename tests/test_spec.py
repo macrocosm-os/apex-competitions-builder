@@ -43,6 +43,70 @@ def test_solo_forbids_duel_block():
         validate_dict(base)
 
 
+def test_solo_defaults_to_one_player_sandbox(tmp_path):
+    import yaml
+
+    base = _minimal_solo()
+    p = tmp_path / "spec.yaml"
+    p.write_text(yaml.safe_dump(base))
+    spec = load_spec(p, env="stage")
+    assert spec.num_player_sandboxes == 1
+
+
+def test_solo_allows_player_sandboxes_block(tmp_path):
+    import yaml
+
+    base = _minimal_solo()
+    base["solo"] = {"player_sandboxes": 2}
+    validate_dict(base)  # solo block is valid for kind: solo
+    p = tmp_path / "spec.yaml"
+    p.write_text(yaml.safe_dump(base))
+    spec = load_spec(p, env="stage")
+    assert spec.num_player_sandboxes == 2
+
+
+def test_solo_block_rejects_unknown_field():
+    base = _minimal_solo()
+    base["solo"] = {"player_sandboxes": 2, "bogus": True}
+    with pytest.raises(SpecError):
+        validate_dict(base)
+
+
+def test_solo_block_requires_player_sandboxes():
+    base = _minimal_solo()
+    base["solo"] = {}
+    with pytest.raises(SpecError):
+        validate_dict(base)
+
+
+def test_player_sandboxes_minimum_is_one():
+    base = _minimal_solo()
+    base["solo"] = {"player_sandboxes": 0}
+    with pytest.raises(SpecError):
+        validate_dict(base)
+
+
+def test_duel_forbids_solo_block():
+    base = _minimal_solo()
+    base["kind"] = "duel"
+    base["duel"] = {"players_per_match": 2, "num_games_default": 1, "swap_sides": True}
+    base["solo"] = {"player_sandboxes": 2}  # solo block is not allowed for duel
+    with pytest.raises(SpecError):
+        validate_dict(base)
+
+
+def test_duel_num_player_sandboxes_from_players_per_match(tmp_path):
+    import yaml
+
+    base = _minimal_solo()
+    base["kind"] = "duel"
+    base["duel"] = {"players_per_match": 3, "num_games_default": 1, "swap_sides": True}
+    p = tmp_path / "spec.yaml"
+    p.write_text(yaml.safe_dump(base))
+    spec = load_spec(p, env="stage")
+    assert spec.num_player_sandboxes == 3
+
+
 def test_referee_block_required():
     base = _minimal_solo()
     del base["referee"]  # referee is required for both solo and duel

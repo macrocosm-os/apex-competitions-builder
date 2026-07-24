@@ -248,6 +248,8 @@ def _print_plan(spec: LoadedSpec, env: str) -> None:
     ep = s["entrypoints"]["evaluate"]
     print("\nExecution plan")
     print(f"  kind           : {s['kind']}")
+    if not spec.is_duel and spec.num_player_sandboxes > 1:
+        print(f"  player sandboxes: {spec.num_player_sandboxes} (isolated copies of the same submission)")
     print(f"  player image   : {s['image']['ref']}@{s['image']['digest']}")
     print(f"  submission     : {s['submission']['artifact_type']} -> {s['submission']['target_path']}")
     print(

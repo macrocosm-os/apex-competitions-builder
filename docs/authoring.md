@@ -11,7 +11,8 @@ You always author two images: a player and a referee.
 
 **Solo** — miners are scored independently against round input (a **1-player duel**). Use this
 when quality can be measured without another player (compression, prediction, optimization,
-single-agent RL). One player sandbox + one referee.
+single-agent RL). One player sandbox + one referee — or, via `solo.player_sandboxes`, several
+isolated sandboxes running the same submission so its phases can't share state (still one referee).
 
 **Duel** — submissions play against each other. N player sandboxes + one referee that holds the
 rules. Use this for games and any head-to-head evaluation.
@@ -23,6 +24,10 @@ Copy `examples/hello-world/spec.yaml` and edit it. The full contract is in
 
 - `id` / `version` — `(id, version)` is immutable once synced. Bump `version` for any change.
 - `kind` — `solo` or `duel`.
+- `solo` (optional, solo only) — `player_sandboxes` to run the SAME submission in N mutually-isolated
+  sandboxes (own memory + filesystem) instead of the default 1. The referee receives that many
+  `PLAYER_URLS`. Use it when distinct phases of one submission must not pass state to each other
+  (e.g. a compressor sandbox and a separate decompressor sandbox). Omit for the usual 1 sandbox.
 - `resources` — per-sandbox `cpu_limit`, `mem_limit`, `gpu_count`. Must fit the env ceilings
   (stage: 2 CPU / 2Gi; prod: 4 CPU / 4Gi; memory floor 256Mi). GPUs are gated by the platform.
 - `image` — your **player** image, **pinned by digest** (tags are forbidden).

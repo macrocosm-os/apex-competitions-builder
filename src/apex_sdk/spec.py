@@ -57,6 +57,17 @@ class LoadedSpec:
     def is_duel(self) -> bool:
         return self.raw["kind"] == "duel"
 
+    @property
+    def num_player_sandboxes(self) -> int:
+        """How many player sandboxes the platform provisions for one evaluation.
+
+        duel -> `duel.players_per_match` (distinct submissions). solo -> 1 by default, or
+        `solo.player_sandboxes` isolated sandboxes of the SAME submission when set.
+        """
+        if self.raw["kind"] == "duel":
+            return int(self.raw["duel"]["players_per_match"])
+        return int(self.raw.get("solo", {}).get("player_sandboxes", 1))
+
 
 def load_schema() -> dict[str, Any]:
     """Load the bundled apex.competition.v1 JSON Schema."""
