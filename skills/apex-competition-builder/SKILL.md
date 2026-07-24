@@ -23,7 +23,7 @@ A competition is a **declarative, versioned, signed spec** (`apex.competition.v1
 | # | Deliverable | What it is |
 |---|---|---|
 | 1 | **`spec.yaml`** | The competition itself: kind (`solo`/`duel`), resources, submission contract, screening config, round defaults, entrypoints, images, cosign identity. Copy `examples/hello-world/spec.yaml` from this repo and edit. |
-| 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. Build on the SDK's `player-base`; digest-pinned, cosign-signed. |
+| 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. Vendor the SDK's `gym_v1/` into your repo on a stock base (current convention) — or build on the SDK's `player-base` once it's published; either way digest-pinned, cosign-signed. See *Getting the SDK into your images* below. |
 | 3 | **Referee image** | Competition-owned scorer. Holds ALL domain logic: game rules, datasets, ground truth, scoring. Drives the player(s) over the per-job network and writes `/data/result.json`. Required for both solo and duel. |
 | 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: an image-driven command that writes the round's tasks to a file at round start. Omit it if the platform-injected per-round seed is enough. |
 | 5 | **Layer-2 screen image** (optional) | `entrypoints.screen`: bespoke behavioural checks in their **own** image (exit 0 = pass), so secret checks stay private while your player image can be public. Aim to not need one — see design step 2. |
@@ -120,6 +120,13 @@ Miners are adversarial, well-resourced, and patient. Before finalizing the desig
 ## The runtime contract (what your images must implement)
 
 Full contracts with docstrings live in the SDK (`src/apex_sdk/gym_v1/`, `docs/authoring.md`); the essentials:
+
+**Getting the SDK into your images — two patterns (the import root differs).** The `Player`/`Referee`/`GameResult`/`PlayerClient` classes below ship in the SDK; how you package it decides how you import it:
+
+- **Vendored — the current convention, and what actually works today.** Copy the SDK's `gym_v1/` into your competition repo and build on a stock base (`FROM python:3.12-slim`); import the top-level package, e.g. `from gym_v1.player import Player, serve`. Shipped competitions use this because the base images below are **not published to any registry yet** — vendoring is what builds in your own repo's release CI.
+- **Build-FROM-base — the intended end-state, not yet wired.** `apex-player-base` / `apex-referee-base` bake the SDK in, so you import `apex_sdk.gym_v1`. Until those bases are published you must `docker build` them locally first (see `docs/authoring.md`), so this path doesn't yet work in an external competition's CI.
+
+The snippets in `docs/authoring.md` and `examples/hello-world/` use the `apex_sdk.gym_v1` root; if you vendor, drop the `apex_sdk.` prefix.
 
 **Player image** — the platform writes the miner's artifact to `submission.target_path`, then runs `entrypoints.evaluate.command`. Your image must serve the declared `http_api` (`port`, `readiness_path`, `protocol`). For `gym_v1`, subclass the SDK's `Player` (`reset(match_id, player_index, seed, config)` / `act(observation, deadline_ms)`) and call `serve()` — it exposes `/health`, `/reset`, `/act`. A player that never becomes healthy within the startup budget is a typed failure attributed to the submission.
 

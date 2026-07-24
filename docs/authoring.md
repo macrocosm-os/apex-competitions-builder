@@ -50,6 +50,22 @@ Copy `examples/hello-world/spec.yaml` and edit it. The full contract is in
 Both solo and duel need a **player** image and a **referee** image (see
 `examples/hello-world/player/` and `.../referee/`). Solo is just a 1-player duel.
 
+**How your image gets the SDK — two patterns, and the import root differs:**
+
+- **Vendored (current convention).** Copy the SDK's `gym_v1/` into your competition repo and
+  build on a stock base (`FROM python:3.12-slim`); import the top-level package —
+  `from gym_v1.player import Player, serve`. This is what shipped competitions do, because the
+  base images below are **not published to a registry yet**, so vendoring is what builds in your
+  own repo's release CI.
+- **Build-FROM-base (intended end-state).** `apex-player-base` / `apex-referee-base` bake the SDK
+  in, so you import `apex_sdk.gym_v1` (as the snippets and `examples/hello-world/` do). Until the
+  bases are published you must `docker build` them locally first (step 3 setup) — so this path
+  does not yet work in an external competition's CI.
+
+The snippets below use the `apex_sdk.gym_v1` root; if you vendor, drop the `apex_sdk.` prefix
+(`from gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`,
+`from gym_v1.client import PlayerClient`).
+
 **Player** — wrap the submission in a `Player` and serve it:
 
 ```python
