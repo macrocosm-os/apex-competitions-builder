@@ -26,7 +26,7 @@ A competition is a **declarative, versioned, signed spec** (`apex.competition.v1
 | 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. Build on the SDK's `player-base`; digest-pinned, cosign-signed. |
 | 3 | **Referee image** | Competition-owned scorer. Holds ALL domain logic: game rules, datasets, ground truth, scoring. Drives the player(s) over the per-job network and writes `/data/result.json`. Required for both solo and duel. |
 | 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: an image-driven command that writes the round's tasks to a file at round start. Omit it if the platform-injected per-round seed is enough. |
-| 5 | **Layer-2 screen image** (optional) | `entrypoints.screen`: bespoke behavioural checks in their **own** image (exit 0 = pass), so secret checks stay private while your player image can be public. Aim to not need one — see design step 2. |
+| 5 | **Layer-2 screen image** (optional) | `entrypoints.screen`: bespoke behavioural checks in their **own** image (exit 0 = pass), so secret checks stay isolated from the player image even if the player image is made public. Aim to not need one — see design step 2. |
 
 Plus, alongside those: an `input_schema` (JSON Schema, emitted from a pydantic model) with input fixtures, a **working baseline submission** (must score > 0; it seeds the leaderboard and is your integration test), and a miner-facing README that lets miners iterate locally without leaking ground truth.
 
@@ -48,7 +48,7 @@ Miner ──apex submit──▶ Apex orchestrator ──▶ queue ──▶ Ape
 
 The submission and your scoring logic **never share a sandbox** — a submission can't read or patch the scorer, and the scorer's data never enters the miner-reachable container. Solo is simply a 1-player duel: same two images, one player.
 
-Off to the side, the control plane: your spec lives in your public competition repo; a Macrocosmos maintainer copies it into the private `apex-competitions-registry`, and a platform spec-syncer validates it, verifies the cosign signature, mirrors your images by digest, and activates the version per environment. Trust = signed digests + admin-merged pointers, both reviewable in git.
+Off to the side, the control plane: your spec lives in your competition repo (public or private, your choice); a Macrocosmos maintainer copies it into the private `apex-competitions-registry`, and a platform spec-syncer validates it, verifies the cosign signature, mirrors your images by digest (including private packages), and activates the version per environment. Trust = signed digests + admin-merged pointers, both reviewable in git — not repo visibility.
 
 ## Design order (do these before writing code)
 
@@ -159,18 +159,18 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] Security checklist passed (`reference/security-checklist.md`).
 - [ ] `spec.yaml` written from the SDK example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
 - [ ] Player + referee images implemented on the SDK bases; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
-- [ ] Miner README written — everything a miner needs to iterate locally (including how to run your public player image against their own submission), nothing that leaks ground truth.
+- [ ] Miner README written — everything a miner needs to iterate locally (including how to run your player image against their own submission), nothing that leaks ground truth.
 - [ ] Ops parameters proposed with reasons tied to the success statement: `round_length_in_days` (production runs 1–2), `submission_reveal_days` (1–7), submission fee in USD (≈$1 in production), incentive weight (negotiated with Macrocosmos; active competitions run 0.02–0.05), and for duels `players_per_match` / `num_games_default` / `swap_sides`. Trade-offs: `reference/evaluation-design.md` § Operating parameters.
 
 ## Onboarding with Macrocosmos
 
-Your competition repo, `spec.yaml`, and signed player image are public; the registry that activates them is private (it's the control plane), so you don't PR it directly:
+Your repo and images can be **public or private** — your choice, per artifact (most production competitions run fully private). The platform verifies and mirrors your images **by digest** and can pull private packages, so visibility is a transparency decision, not a technical gate. The registry that activates them is always private (it's the control plane), so you don't PR it directly:
 
 1. Build + sign your image(s) with keyless cosign; push by digest; tag a release of your repo.
 2. Open a **Competition onboarding issue** on this repo with your repo URL, released tag, and image refs + digests, and attach `HANDOFF.md` — the manifest in this skill: goal statement, ops proposal, evaluation-sizing evidence, and the threat-model questionnaire.
 3. A Macrocosmos maintainer reviews (digest pinning, cosign identity, resource ceilings, the security checklist against your questionnaire answers), copies your `spec.yaml` verbatim into the private registry, and activates it on **stage first** — your baseline runs a staging round — then prod. Expect one round-trip of feedback on evaluation sizing and the reveal policy — those are the two things designers most often get wrong on the first pass.
 
-Updating a live competition is the same loop: bump `version` in your public repo (the `(id, version)` pair is immutable once synced), re-sign, and request activation of the new version.
+Updating a live competition is the same loop: bump `version` in your repo (the `(id, version)` pair is immutable once synced), re-sign, and request activation of the new version.
 
 ## Reference files
 

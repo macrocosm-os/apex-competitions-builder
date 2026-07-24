@@ -33,7 +33,7 @@ divergence):
 
 | Item | Where | Done |
 |---|---|---|
-| Competition repo (public) + released tag | `<url>` @ `<tag>` | ☐ |
+| Competition repo (public or private) + released tag | `<url>` @ `<tag>` | ☐ |
 | `spec.yaml` (`apex.competition.v1`) — `apex-dev preflight` passes | `<path in repo>` | ☐ |
 | Player image | `<registry>/<image>@sha256:<digest>` | ☐ |
 | Referee image | `<registry>/<image>@sha256:<digest>` | ☐ |
@@ -90,8 +90,8 @@ Written evidence, not intent — run the procedure in
    everything else that enters the player sandbox (env, config, observation
    stream). For each: why is it safe in an adversary's hands?
 2. **Seed leverage.** Can ground truth, the held-out pool sampling, or any
-   future round's data be regenerated from the round seed plus your public
-   repo/images?
+   future round's data be regenerated from the round seed plus the miner-reachable
+   player image (and repo, if public)?
 3. **Degenerate submissions.** What raw score does a constant / empty /
    all-zeros / random-noise submission get? Which gate zeroes it if it
    would otherwise place?
@@ -115,9 +115,10 @@ Written evidence, not intent — run the procedure in
     be constrained to `onnx`/`torchscript`? Which `screening` extras does
     your spec add to the base forbidden sets? If artifacts: can the format
     smuggle code (TorchScript-style), and what structural checks block it?
-11. **Public-image hygiene.** Your player image and repo are public — confirm
-    they contain no ground truth, judge configuration, or held-out data.
-    Secret checks belong in the referee or the Layer-2 screen image.
+11. **Player-image hygiene.** The player image is miner-reachable and may be
+    public (repo/image visibility is your choice) — treat its contents as
+    exposable and confirm it contains no ground truth, judge configuration, or
+    held-out data. Secret checks belong in the referee or the Layer-2 screen image.
 12. **Diagnostics payload.** What goes in `result.json` metadata / artifact
     files revealed at round completion, and why does none of it correlate
     with hidden ground truth?

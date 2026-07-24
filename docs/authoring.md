@@ -102,11 +102,21 @@ stage to execute. A local 2-sandbox harness is a follow-up.
 
 ## 5. Ship it
 
-Everything you own is public: your competition repo, your `spec.yaml`, and your
-signed image. The `apex-competitions-registry` that drives the platform is **private**
-(it's the control plane — it decides which image digests are trusted and which
-competitions are live), so you don't open a PR against it directly. Instead you hand
-your artifacts to Macrocosmos, who land the registry change and activate it.
+You choose the visibility of everything you own — repo, `spec.yaml`, and images can
+each be **public or private**, independently. Visibility is a transparency choice, not
+a technical requirement: the platform verifies and mirrors your images **by digest**
+and has read access to pull private packages, so a fully private competition works end
+to end (most production competitions run this way). What security depends on is the
+signed digest, not who can see the source. The `apex-competitions-registry` that drives
+the platform is always **private** (it's the control plane — it decides which image
+digests are trusted and which competitions are live), so you don't open a PR against it
+directly. Instead you hand your artifacts to Macrocosmos, who land the registry change
+and activate it.
+
+Whatever visibility you pick, treat anything in the **player image and repo as
+potentially exposed** — keep ground truth, datasets, and scoring in the referee image
+(and secret behavioural checks in the optional Layer-2 screen image); those stay private
+regardless.
 
 1. Build + sign your image(s) with keyless cosign; push by digest.
 2. **Request onboarding** — open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
@@ -116,6 +126,6 @@ your artifacts to Macrocosmos, who land the registry change and activate it.
    resource ceilings), and opens the registry PR.
 3. A Macrocosmos maintainer activates it via `active/<env>.yaml`. Stage first, then prod.
 
-> Because your `spec.yaml` lives in your public repo, the maintainer copies it verbatim
-> — there's nothing to duplicate by hand. Keep it as the source of truth and bump the
-> `version` for each release.
+> The maintainer copies your `spec.yaml` verbatim from your repo (or the issue) — there's
+> nothing to duplicate by hand. Keep it as the source of truth and bump the `version` for
+> each release.
