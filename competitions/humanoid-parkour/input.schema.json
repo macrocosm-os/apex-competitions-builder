@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "humanoid_parkour round input",
+  "description": "Evaluation shape for one round. Courses themselves are derived inside the referee from the platform's per-round SEED; the round input only carries the (miner-visible, non-secret) evaluation dimensions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["courses_per_difficulty", "max_steps_per_episode", "deadline_ms"],
+  "properties": {
+    "courses_per_difficulty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "description": "Course instances per difficulty tier (easy/medium/hard). Total instances = 3x this."
+    },
+    "max_steps_per_episode": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 4000,
+      "description": "Control-step cap per course (1 step = 15 ms sim time)."
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 50,
+      "maximum": 5000,
+      "description": "Per-/act deadline for the policy, enforced by the referee's HTTP client."
+    }
+  }
+}
