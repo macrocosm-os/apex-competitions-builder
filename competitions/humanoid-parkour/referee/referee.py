@@ -20,9 +20,12 @@ from apex_sdk.gym_v1 import GameResult, Referee, RefereeContext
 from apex_sdk.gym_v1.client import PlayerClient, PlayerError
 
 from env import DIFFICULTIES, ParkourSim, generate_course, instance_score
-from env.sim import DEFAULT_MAX_STEPS, InvalidAction
+from env.sim import InvalidAction
 
-DEFAULT_COURSES_PER_DIFFICULTY = 8
+# Sized per HANDOFF.md §4: N = 3 x 40 = 120 course instances, 900-step episode
+# cap (13.5 s sim time). The round input (CONFIG_JSON) can override.
+DEFAULT_COURSES_PER_DIFFICULTY = 40
+DEFAULT_MAX_STEPS = 900
 DEFAULT_DEADLINE_MS = 500
 
 

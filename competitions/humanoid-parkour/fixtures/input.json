@@ -1,5 +1,5 @@
 {
-  "courses_per_difficulty": 8,
-  "max_steps_per_episode": 1200,
+  "courses_per_difficulty": 40,
+  "max_steps_per_episode": 900,
   "deadline_ms": 500
 }

@@ -17,7 +17,8 @@ and the fastest, most reliable policy leads the board.
   1.0 m, or any body part except the feet touching the floor — no crawling),
   **out_of_bounds** (|y| > 2 — you can't run around the hurdles),
   **physics_glitch** (NaN/exploding state — scores 0, don't surf solver bugs),
-  or **timeout** (1200 control steps = 18 s).
+  or **timeout** (900 control steps = 13.5 s; you need to average ≥ 1.5 m/s
+  to finish).
 
 ## Scoring
 
@@ -31,11 +32,16 @@ Per course instance (higher is better):
 
 Any completion beats any non-completion; among completions, faster is better;
 partial progress still pays, so early policies have a gradient to climb.
-**raw_score = mean over all 24 course instances** (8 per difficulty). A new
+**raw_score = mean over all 120 course instances** (40 per difficulty). A new
 submission takes the lead by beating the top raw score by ≥ 1%.
 
+The released baseline (`baseline/baseline.onnx`, PPO, 15M steps) scores
+**0.487** — it runs ~9.7 m on average and hasn't cleared a course. Beating it
+is table stakes; the first policy that reliably completes courses scores > 1
+and laps the field.
+
 Courses are derived from a per-round master seed injected into the referee:
-every submission in a round runs the exact same 24 courses, and resubmitting
+every submission in a round runs the exact same 120 courses, and resubmitting
 an identical policy scores identically — seed-fishing buys nothing. Next
 round, fresh courses: memorizing layouts doesn't transfer; robust locomotion
 does.
@@ -44,8 +50,12 @@ does.
 
 - Exactly one input: `float32 [1, 56]` (or dynamic batch dim) — one output:
   `float32 [1, 17]`.
-- ≤ 25 MB. Loaded with onnxruntime (CPU, single-threaded) by the public
-  player image; a non-conforming model is rejected at load.
+- ≤ 25 MB, **single file with weights embedded** — an export that references
+  an external `.data` sidecar will fail to load (the platform writes exactly
+  one artifact file). `train_baseline.py`'s `embed_external_data()` fixes
+  torch exports that split weights out.
+- Loaded with onnxruntime (CPU, single-threaded) by the public player image;
+  a non-conforming model is rejected at load.
 - Actions are clipped to the actuator range ±0.4 by the evaluator. Bake any
   observation normalization into the graph — evaluation feeds raw
   observations (see `ExportablePolicy` in

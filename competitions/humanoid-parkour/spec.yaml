@@ -10,12 +10,12 @@ resources:
   mem_limit: 1.5Gi
   gpu_count: 0
 
-# NOTE: ref/digest are placeholders until the images are built, pushed, and
-# cosign-signed from the competition's public repo (see HANDOFF.md deliverables).
+# Built + keyless-cosign-signed by this repo's release workflow (see
+# .github/workflows/release.yml); digests from the signed ghcr manifests.
 # `image` is the PLAYER image (loads + serves the miner's ONNX policy).
 image:
   ref: ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-player
-  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  digest: sha256:b1f5eec03fc92056c89a6105409d66691aa0cc39b5e73f2c55328ea6501fe342
 
 # ONNX artifact: the miner submits a policy graph, not code. The player image
 # validates the interface ([1,56] float32 in -> [1,17] float32 out) at load
@@ -35,9 +35,9 @@ input_schema:
 
 defaults:
   baseline_score: 0.0
-  # PLACEHOLDER — must be measured with the trained PPO baseline before
-  # onboarding (tools/measure_variance.py); "measured, not guessed".
-  baseline_raw_score: 0.05
+  # Measured: mean over 20 master seeds at N=120 courses with the released
+  # PPO baseline (baseline/baseline.onnx); per-seed numbers in HANDOFF.md §4.
+  baseline_raw_score: 0.487
   round_length_in_days: 2
   submission_reveal_days: 5      # trained policies carry real R&D; protect them
   lower_is_better: false
@@ -45,7 +45,8 @@ defaults:
 entrypoints:
   # The PLAYER sandbox: serves the ONNX policy over gym_v1; the referee drives
   # it one observation at a time. timeout_s must cover the whole evaluation
-  # (24 courses x <=1200 control steps; measured ~2-4 min, ceiling 15).
+  # (120 courses x <=900 control steps; measured ~15 s for the baseline,
+  # ~6 min worst case for a policy surviving every step).
   evaluate:
     command: ["python", "/app/launch.py", "--port", "8000"]
     network_disabled: false   # the referee must reach the player on the per-job network
@@ -63,7 +64,7 @@ referee:
   protocol: gym_v1
   image:
     ref: ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-referee
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    digest: sha256:8f78c73caa656b5c04f56f3c62171a7005c94eaa1450788fd942cb3456885bc7
   timeout_s: 900
 
 signature:

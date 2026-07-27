@@ -27,6 +27,25 @@ from env.gym_env import HumanoidParkourEnv  # noqa: E402
 from env.sim import ACT_DIM, CTRL_RANGE, OBS_DIM  # noqa: E402
 
 
+def embed_external_data(path: str) -> None:
+    """Repack an ONNX file so all weights live inline in the single .onnx file.
+
+    Newer torch exporters write initializers to a sidecar `<path>.data` file.
+    The platform writes exactly ONE artifact file to `submission.target_path`,
+    so a submission that references external data will fail to load — always
+    run the export through this before submitting.
+    """
+    import onnx
+
+    model = onnx.load(path)  # pulls any external data into raw_data
+    for tensor in model.graph.initializer:
+        if tensor.data_location == onnx.TensorProto.EXTERNAL:
+            tensor.ClearField("external_data")
+            tensor.data_location = onnx.TensorProto.DEFAULT
+    onnx.save(model, path)
+    Path(path + ".data").unlink(missing_ok=True)
+
+
 class ExportablePolicy(torch.nn.Module):
     """Deterministic SB3 PPO policy with VecNormalize baked into the graph.
 
@@ -98,7 +117,8 @@ def main() -> None:
         output_names=["action"],
         opset_version=17,
     )
-    print(f"exported {args.out} (obs [1,{OBS_DIM}] -> action [1,{ACT_DIM}])")
+    embed_external_data(args.out)
+    print(f"exported {args.out} (obs [1,{OBS_DIM}] -> action [1,{ACT_DIM}], weights embedded)")
 
 
 if __name__ == "__main__":
