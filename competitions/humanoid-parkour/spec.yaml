@@ -11,11 +11,11 @@ resources:
   gpu_count: 0
 
 # Built + keyless-cosign-signed by this repo's release workflow (see
-# .github/workflows/release.yml); digests from the signed ghcr manifests.
+# .github/workflows/release.yml); digests from the signed ghcr manifests (built + signed on tag v0.1.0).
 # `image` is the PLAYER image (loads + serves the miner's ONNX policy).
 image:
   ref: ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-player
-  digest: sha256:b1f5eec03fc92056c89a6105409d66691aa0cc39b5e73f2c55328ea6501fe342
+  digest: sha256:f03b38e1d4608ad311e413a6a5a036beb30e2899f5a77a8a0b8fd5524310c3da
 
 # ONNX artifact: the miner submits a policy graph, not code. The player image
 # validates the interface ([1,56] float32 in -> [1,17] float32 out) at load
@@ -64,7 +64,7 @@ referee:
   protocol: gym_v1
   image:
     ref: ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-referee
-    digest: sha256:8f78c73caa656b5c04f56f3c62171a7005c94eaa1450788fd942cb3456885bc7
+    digest: sha256:4fec12451136aafacb53577a1e30418110ded543a65ebfbbd768ea03a486b179
   timeout_s: 900
 
 signature:

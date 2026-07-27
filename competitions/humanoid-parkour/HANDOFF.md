@@ -47,11 +47,11 @@ divergence):
 |---|---|---|
 | Competition repo (public) + released tag | https://github.com/macrocosm-os/apex-competition-humanoid-parkour @ `v0.1.0` | ☑ |
 | `spec.yaml` (`apex.competition.v1`) — `apex-dev preflight` passes | `spec.yaml` (repo root; preflight ✓ 2026-07-27) | ☑ |
-| Player image | `ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-player@sha256:b1f5eec03fc92056c89a6105409d66691aa0cc39b5e73f2c55328ea6501fe342` (cosign-signed) | ☑ |
-| Referee image | `ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-referee@sha256:8f78c73caa656b5c04f56f3c62171a7005c94eaa1450788fd942cb3456885bc7` (cosign-signed) | ☑ |
+| Player image | `ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-player@sha256:f03b38e1d4608ad311e413a6a5a036beb30e2899f5a77a8a0b8fd5524310c3da` (cosign-signed on tag v0.1.0) | ☑ |
+| Referee image | `ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-referee@sha256:4fec12451136aafacb53577a1e30418110ded543a65ebfbbd768ea03a486b179` (cosign-signed on tag v0.1.0) | ☑ |
 | Layer-2 screen image — or written justification for why none is needed (§5) | n/a — ONNX artifact with a closed interface ([1,56]→[1,17], float32, ≤25 MB); structural validation in the public player loader + Layer-1 weights validator. No code enters the sandbox, so no behavioural screen is required. | ☑ |
 | Round-generation entrypoint (`generate_round`) — or "platform seed is enough" | Platform seed is enough: the referee derives all 120 courses deterministically from `SEED` via `SeedSequence` | ☑ |
-| Cosign identity + issuer (as declared in the spec `signature` block) | https://github.com/macrocosm-os/apex-competition-humanoid-parkour/.github/workflows/release.yml (keyless, GitHub OIDC; run 30304485354) | ☑ |
+| Cosign identity + issuer (as declared in the spec `signature` block) | https://github.com/macrocosm-os/apex-competition-humanoid-parkour/.github/workflows/release.yml (keyless, GitHub OIDC; tag run 30307884778) | ☑ |
 | `input_schema` + input fixtures | `input.schema.json`, `fixtures/input.json` | ☑ |
 | Baseline submission (scores > 0 through the full player+referee loop) | `baseline/baseline.onnx` (PPO, 15M steps, recipe in `baseline/train_baseline.py`) — raw **0.4872** mean over 20 seeds at N=120 | ☑ |
 | Miner-facing README | `README.md` (repo root) | ☑ |
@@ -68,7 +68,7 @@ versions. List every pin here:
 - dependency pins: `mujoco==3.10.0`, `numpy==2.3.4` (referee);
   `onnxruntime==1.28.0`, `numpy==2.3.4` (player) — single-threaded ORT session
   for determinism
-- image digests: player `sha256:b1f5eec0…fe342`, referee `sha256:8f78c73c…5bc7`
+- image digests: player `sha256:f03b38e1…c3da`, referee `sha256:4fec1245…b179`
   (full digests in the deliverables table and spec.yaml)
 
 ## 3. Ops parameters (your proposal — each with a one-line reason tied to §1)
@@ -86,7 +86,7 @@ onboarding.
 | `defaults.lower_is_better` | spec | false — score rewards completion + speed (see §1 metric); pure lower-is-better time gives no gradient before anyone completes | — |
 | `defaults.baseline_raw_score` / `baseline_score` | spec | 0.487 / 0.0 — measured: mean over 20 master seeds at N=120 with the released baseline (§4) | measured, not guessed |
 | `resources` (per sandbox) | spec | 1 CPU / 1.5Gi — measured sim cost 0.39 ms per control step; baseline uses well under 50% | ~1 CPU / 1.5Gi (ceilings: stage 2 CPU / 2Gi, prod 4 CPU / 4Gi) |
-| `evaluate.timeout_s` / `referee.timeout_s` | spec | 900 / 900 — measured worst case (24 courses × 1200 steps, sim+HTTP+inference) ≈ 1–2 min for an MLP, ≈ 6 min headroom for a slow 25 MB policy | median eval 1–10 min |
+| `evaluate.timeout_s` / `referee.timeout_s` | spec | 900 / 900 — baseline eval measured ~15 s at N=120; worst case (survives all 900 steps on 120 courses) ≈ 5–7 min | median eval 1–10 min |
 | Per-move deadline (`deadline_ms`, gym_v1) | referee config (round input) | 500 ms — typical policy inference is ~1 ms; 500 ms tolerates jitter while forcing CPU-fast policies | 0.5–5 s |
 | Submission fee | platform | ≈$1 — standard anti-spam; eval cost is low so no higher fee needed | ≈$1 (the anti-spam mechanism; final: Macrocosmos) |
 | Incentive weight | platform | 0.03 (mid-range; Macrocosmos decides) | 0.02–0.05 (final: Macrocosmos) |
