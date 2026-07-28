@@ -141,7 +141,7 @@ potentially exposed** — keep ground truth, datasets, and scoring in the refere
 regardless.
 
 1. Build + sign your image(s) with keyless cosign; push by digest.
-2. **Request onboarding** — open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
+2. **Request onboarding** — open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)
    with your competition repo URL, the released tag, and the image ref + digest. A
    Macrocosmos maintainer copies your `spec.yaml` into the private registry
    (`competitions/<id>/<version>.yaml`), reviews it (digest pinned, cosign identity,
