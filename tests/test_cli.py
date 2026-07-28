@@ -1,24 +1,22 @@
 """Tests for the `apex-dev` CLI, focused on the `run` executor.
 
-The argument-parsing / duel tests need no Docker. The end-to-end test builds the
-hello-world player image and runs it, so it is skipped when docker is unavailable.
+No Docker required: `apex-dev run` validates its args and prints the plan, then exits 3
+because referee-driven local execution isn't implemented yet, so nothing is ever built.
+The spec/submission/Dockerfile below are test fixtures (see tests/fixtures/README.md), not
+an example to copy — the worked example lives in the apex-competition-hello-world repo.
 """
 
-import shutil
 from pathlib import Path
 
 import yaml
 
 from apex_sdk.dev.cli import main
 
-REPO = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO / "examples" / "hello-world"
-SPEC = EXAMPLE / "spec.yaml"
-INPUT = EXAMPLE / "fixtures" / "input.json"
-SUBMISSION = EXAMPLE / "player" / "submission.py"
-DOCKERFILE = EXAMPLE / "player" / "Dockerfile"
-
-_HAS_DOCKER = shutil.which("docker") is not None
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "solo"
+SPEC = FIXTURE / "spec.yaml"
+INPUT = FIXTURE / "input.json"
+SUBMISSION = FIXTURE / "submission.py"
+DOCKERFILE = FIXTURE / "Dockerfile"
 
 
 def _minimal_duel() -> dict:

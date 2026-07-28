@@ -9,7 +9,8 @@ Apex is a competition platform running as Bittensor Subnet 1. You (the competiti
 
 Read first (public):
 
-- This repo — schema, base images, `apex-dev` CLI, worked example: start with [docs/authoring.md](../../docs/authoring.md) and [examples/hello-world/](../../examples/hello-world/)
+- This repo — schema, base images, `apex-dev` CLI: start with [docs/authoring.md](../../docs/authoring.md)
+- The worked example competition, laid out exactly like the repo you'll build (fork it): https://github.com/macrocosm-os/apex-competition-hello-world
 - Full docs index (agent-friendly, one fetch): https://docs.macrocosmos.ai/llms.txt
 - Platform overview: https://docs.macrocosmos.ai/subnets/subnet-1-apex
 - How live competitions describe their scoring: https://docs.macrocosmos.ai/subnets/subnet-1-apex/subnet-1-current-competitions
@@ -22,7 +23,7 @@ A competition is a **declarative, versioned, signed spec** (`apex.competition.v1
 
 | # | Deliverable | What it is |
 |---|---|---|
-| 1 | **`spec.yaml`** | The competition itself: kind (`solo`/`duel`), resources, submission contract, screening config, round defaults, entrypoints, images, cosign identity. Copy `examples/hello-world/spec.yaml` from this repo and edit. |
+| 1 | **`spec.yaml`** | The competition itself: kind (`solo`/`duel`), resources, submission contract, screening config, round defaults, entrypoints, images, cosign identity. Copy [hello-world's `spec.yaml`](https://github.com/macrocosm-os/apex-competition-hello-world/blob/main/spec.yaml) and edit. |
 | 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. **Vendor the SDK's `gym_v1/` into your repo and build on `FROM python:3.12-slim`** — do **not** use `FROM apex-player-base` (not usable yet; see *Getting the SDK into your images* below). Digest-pinned, cosign-signed. |
 | 3 | **Referee image** | Competition-owned scorer. Holds ALL domain logic: game rules, datasets, ground truth, scoring. Drives the player(s) over the per-job network and writes `/data/result.json`. Required for both solo and duel. |
 | 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: an image-driven command that writes the round's tasks to a file at round start. Omit it if the platform-injected per-round seed is enough. |
@@ -123,10 +124,10 @@ Full contracts with docstrings live in the SDK (`src/apex_sdk/gym_v1/`, `docs/au
 
 **Getting the SDK into your images — vendor it; do NOT build FROM the base images.** The `Player`/`Referee`/`GameResult`/`PlayerClient` classes below ship in the SDK. There is one pattern you should use today and one you must avoid:
 
-- ✅ **Vendor (do this).** Copy the SDK's `gym_v1/` into your competition repo, build on `FROM python:3.12-slim`, and import the top-level package — `from gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`, `from gym_v1.client import PlayerClient`. This is what every shipped competition does and the only pattern that builds in your own repo's release CI.
+- ✅ **Vendor (do this).** Copy the SDK's `src/apex_sdk/gym_v1/` into your competition repo, build on `FROM python:3.12-slim`, and import the top-level package — `from gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`, `from gym_v1.client import PlayerClient`. This is what every shipped competition does and the only pattern that builds in your own repo's release CI. The [hello-world example repo](https://github.com/macrocosm-os/apex-competition-hello-world) does exactly this — copy its `player/`, `referee/`, and `.github/workflows/release.yml` layout.
 - ❌ **Do NOT use `FROM apex-player-base` / `apex-referee-base` (and their `apex_sdk.gym_v1` import root) in your competition.** Those base images are **not published to any registry**, so the build only resolves on a machine that has `docker build`-ed the base locally — it will **fail in your release CI**. Build-FROM-base is the *intended* future once the bases are published; it is not usable now.
 
-Caveat that will mislead you if you copy it blindly: the `examples/hello-world/` and `docs/authoring.md` snippets use `FROM apex-*-base` and the `apex_sdk.gym_v1` root **only because they build inside this SDK repo, where the base is available locally**. In *your* competition repo, vendor and drop the `apex_sdk.` prefix.
+Caveat that will mislead you if you copy it blindly: `docs/authoring.md`'s snippets use the `apex_sdk.gym_v1` import root because that's the package name **inside the SDK repo**. In *your* competition repo the vendored package is top-level — drop the `apex_sdk.` prefix.
 
 **Player image** — the platform writes the miner's artifact to `submission.target_path`, then runs `entrypoints.evaluate.command`. Your image must serve the declared `http_api` (`port`, `readiness_path`, `protocol`). For `gym_v1`, subclass the SDK's `Player` (`reset(match_id, player_index, seed, config)` / `act(observation, deadline_ms)`) and call `serve()` — it exposes `/health`, `/reset`, `/act`. A player that never becomes healthy within the startup budget is a typed failure attributed to the submission.
 
@@ -165,7 +166,7 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds).
 - [ ] Security checklist passed (`reference/security-checklist.md`).
 - [ ] `spec.yaml` written from the SDK example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
-- [ ] Player + referee images implemented on the SDK bases; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
+- [ ] Player + referee images implemented with the SDK's `gym_v1/` **vendored** into the repo (`FROM python:3.12-slim`, top-level `gym_v1` imports), not `FROM apex-*-base`; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
 - [ ] Miner README written — everything a miner needs to iterate locally (including how to run your player image against their own submission), nothing that leaks ground truth.
 - [ ] Ops parameters proposed with reasons tied to the success statement: `round_length_in_days` (production runs 1–2), `submission_reveal_days` (1–7), submission fee in USD (≈$1 in production), incentive weight (negotiated with Macrocosmos; active competitions run 0.02–0.05), and for duels `players_per_match` / `num_games_default` / `swap_sides`. Trade-offs: `reference/evaluation-design.md` § Operating parameters.
 
@@ -184,4 +185,5 @@ Updating a live competition is the same loop: bump `version` in your repo (the `
 - `reference/evaluation-design.md` — statistical sizing, seeds, timeouts, resource budgeting, operating guidance.
 - `reference/security-checklist.md` — the full anti-exploit checklist with rationale.
 - `HANDOFF.md` — the fillable onboarding manifest (deliverables, ops proposal, sizing justification, threat-model questionnaire).
-- This repo (authoritative for all mechanics): [docs/authoring.md](../../docs/authoring.md), [examples/hello-world/](../../examples/hello-world/), [the spec schema](../../src/apex_sdk/schema/apex.competition.v1.json), [src/apex_sdk/gym_v1/](../../src/apex_sdk/gym_v1/).
+- This repo (authoritative for all mechanics): [docs/authoring.md](../../docs/authoring.md), [the spec schema](../../src/apex_sdk/schema/apex.competition.v1.json), [src/apex_sdk/gym_v1/](../../src/apex_sdk/gym_v1/) — the package you vendor.
+- [apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world) — the worked example repo to fork.

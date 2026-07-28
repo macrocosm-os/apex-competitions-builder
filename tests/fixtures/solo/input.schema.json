@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "hello_world round input",
-  "description": "One round is a batch of tasks. Each task gives the submission a list of numbers to sort; the score is the fraction of tasks sorted correctly.",
+  "title": "fixture_solo round input",
+  "description": "One round is a batch of tasks. Shaped like a real round input so $ref resolution and fixture validation are exercised.",
   "type": "object",
   "additionalProperties": false,
   "required": ["tasks"],

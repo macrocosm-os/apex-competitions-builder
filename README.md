@@ -16,9 +16,20 @@ as the platform would.
 | `src/apex_sdk/spec.py` | Load + validate a spec, resolve its `input_schema`, enforce resource ceilings. |
 | `src/apex_sdk/gym_v1/` | The duel wire protocol: player server base, referee harness, referee→player client. |
 | `src/apex_sdk/dev/cli.py` | `apex-dev` — `preflight` and `run` your spec locally. |
-| `examples/hello-world/` | A minimal solo competition: spec, input schema, fixture, reference submission. |
-| `images/` | Base image Dockerfiles (`player-base`, `referee-base`). |
+| `images/` | Base image Dockerfiles (`player-base`, `referee-base`). Not published to a registry — see the vendoring note below. |
 | `skills/apex-competition-builder/` | Design guide + agent skill for authoring a competition end-to-end: submission-format doctrine, evaluation sizing, anti-exploit checklist, onboarding manifest. |
+
+## The worked example
+
+The example competition lives in its own repo, laid out exactly like a real competition:
+
+**[macrocosm-os/apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world)** — a minimal solo competition (spec, input schema, fixture, player image, referee image, baseline submission, release workflow). **Fork it to start your own.**
+
+It is also the reference for how your images get the SDK: **vendor** this repo's
+`src/apex_sdk/gym_v1/` into your competition repo and build `FROM python:3.12-slim`, importing
+the top-level `gym_v1`. Do **not** build `FROM apex-player-base` / `apex-referee-base` — those
+bases aren't published to any registry, so they only resolve on a machine that built them
+locally and will fail in your release CI. See `docs/authoring.md` § "How your image gets the SDK".
 
 ## Install
 
@@ -30,18 +41,21 @@ apex-dev --help
 ## Quickstart
 
 ```bash
-# Validate a spec and an input fixture — no Docker. Run this before opening a registry PR.
-apex-dev preflight --spec examples/hello-world/spec.yaml \
-                   --input examples/hello-world/fixtures/input.json
+git clone https://github.com/macrocosm-os/apex-competition-hello-world
+cd apex-competition-hello-world
 
-# Run the solo eval locally in Docker, exactly like the platform. apex-dev builds the
-# player image from the Dockerfile (or pass --image <local-tag> to reuse a prebuilt one),
-# writes the submission to submission.target_path, and validates /data/result.json.
-apex-dev run --spec examples/hello-world/spec.yaml \
-             --input examples/hello-world/fixtures/input.json \
-             --submission examples/hello-world/player/submission.py \
-             --dockerfile examples/hello-world/player/Dockerfile
+# Validate a spec and an input fixture — no Docker. Run this before requesting onboarding.
+apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
+
+# Resolve and preview the execution plan (player + referee images, protocol, resources).
+apex-dev run --spec ./spec.yaml --input fixtures/input.json \
+             --submission ./player/submission.py \
+             --dockerfile ./player/Dockerfile
 ```
+
+`apex-dev run` prints the plan and exits 3 — referee-driven local execution (both sandboxes on a
+shared network) is a follow-up. The hello-world README shows how to run the pair by hand
+meanwhile.
 
 ## The two competition shapes
 
@@ -57,7 +71,7 @@ protocol contracts (with docstrings).
 
 ## How a competition ships
 
-1. Fork the example competition repo; implement your player and referee images.
+1. Fork [apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world); implement your player and referee images.
 2. `apex-dev preflight` and `apex-dev run` until it passes locally.
 3. Build + sign your image(s) (keyless cosign) and push to your registry.
 4. Open a PR to `apex-competitions-registry` adding `competitions/<id>/<version>.yaml`.
