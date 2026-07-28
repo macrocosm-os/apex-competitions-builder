@@ -30,6 +30,14 @@ its own command (and for the player, the platform overrides it with
 
 ## Using them in a competition image
 
+> ⚠️ **Not yet — vendor instead.** These bases are **not published to any registry**, so a
+> competition image that builds `FROM apex-player-base` only resolves on a machine that built
+> the base locally and will **fail in your release CI**. Today, copy `src/apex_sdk/gym_v1/` into
+> your competition repo and build `FROM python:3.12-slim`, importing the top-level `gym_v1` — see
+> [apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world)
+> and `docs/authoring.md` § "How your image gets the SDK". The pattern below is the intended
+> future once these bases are published.
+
 ```dockerfile
 FROM apex-player-base
 COPY evaluate.py /app/evaluate.py

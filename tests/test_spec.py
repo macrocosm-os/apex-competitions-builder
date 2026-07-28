@@ -7,7 +7,7 @@ import pytest
 
 from apex_sdk.spec import SpecError, load_spec, load_schema, validate_dict
 
-EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "hello-world" / "spec.yaml"
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "solo" / "spec.yaml"
 
 
 def test_schema_is_loadable_and_wellformed():
@@ -15,9 +15,9 @@ def test_schema_is_loadable_and_wellformed():
     assert schema["title"] == "apex.competition.v1"
 
 
-def test_hello_world_example_is_valid():
-    spec = load_spec(EXAMPLE, env="stage")
-    assert spec.id == "hello_world"
+def test_solo_fixture_spec_is_valid():
+    spec = load_spec(FIXTURE, env="stage")
+    assert spec.id == "fixture_solo"
     assert spec.kind == "solo"
     assert not spec.is_duel
     # input_schema $ref resolved
@@ -135,9 +135,9 @@ def test_resource_ceiling_enforced(tmp_path):
 def _minimal_solo() -> dict:
     return {
         "schema": "apex.competition.v1",
-        "id": "hello_world",
+        "id": "fixture_solo",
         "version": "0.1.0",
-        "display_name": "Hello",
+        "display_name": "Fixture Solo",
         "kind": "solo",
         "process_type": "cpu",
         "resources": {"cpu_limit": 1, "mem_limit": "512Mi", "gpu_count": 0},

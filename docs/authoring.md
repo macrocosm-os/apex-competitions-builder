@@ -19,7 +19,8 @@ rules. Use this for games and any head-to-head evaluation.
 
 ## 2. Write the spec
 
-Copy `examples/hello-world/spec.yaml` and edit it. The full contract is in
+Copy [`spec.yaml` from the hello-world example repo](https://github.com/macrocosm-os/apex-competition-hello-world/blob/main/spec.yaml)
+and edit it. The full contract is in
 `src/apex_sdk/schema/apex.competition.v1.json`; the fields the platform cares about most:
 
 - `id` / `version` — `(id, version)` is immutable once synced. Bump `version` for any change.
@@ -47,29 +48,34 @@ Copy `examples/hello-world/spec.yaml` and edit it. The full contract is in
 
 ## 3. Implement the image(s)
 
-Both solo and duel need a **player** image and a **referee** image (see
-`examples/hello-world/player/` and `.../referee/`). Solo is just a 1-player duel.
+Both solo and duel need a **player** image and a **referee** image. The
+[hello-world example repo](https://github.com/macrocosm-os/apex-competition-hello-world) is a
+complete, buildable pair (`player/`, `referee/`) — read it alongside this section. Solo is just a
+1-player duel.
 
 **How your image gets the SDK — vendor it; do NOT build FROM the base images.**
 
-- ✅ **Vendor (do this).** Copy the SDK's `gym_v1/` into your competition repo and build on a stock
-  base (`FROM python:3.12-slim`); import the top-level package — `from gym_v1.player import Player,
-  serve`, `from gym_v1.referee import Referee, GameResult`, `from gym_v1.client import PlayerClient`.
-  This is what every shipped competition does and the only pattern that builds in your own repo's
-  release CI.
+- ✅ **Vendor (do this).** Copy this repo's `src/apex_sdk/gym_v1/` into your competition repo and
+  build on a stock base (`FROM python:3.12-slim`); import the top-level package — `from
+  gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`, `from
+  gym_v1.client import PlayerClient`. This is what every shipped competition does and the only
+  pattern that builds in your own repo's release CI. hello-world's
+  [`player/Dockerfile`](https://github.com/macrocosm-os/apex-competition-hello-world/blob/main/player/Dockerfile)
+  and its README's re-vendoring snippet show the whole mechanic.
 - ❌ **Do NOT use `FROM apex-player-base` / `apex-referee-base`.** They bake the SDK in (so you'd
   import `apex_sdk.gym_v1`), but they are **not published to any registry**, so the build only
   resolves on a machine that has `docker build`-ed the base locally — it will **fail in your release
   CI**. This is the intended future once the bases are published; it is not usable now.
 
-The snippets below (and `examples/hello-world/`) use `FROM apex-*-base` and the `apex_sdk.gym_v1`
-root **only because they build inside this SDK repo, where the base is available locally**. In your
-competition repo, vendor and drop the `apex_sdk.` prefix.
+The snippets below use the `apex_sdk.gym_v1` import root because that's how the package is named
+**inside this SDK repo**. In your competition repo the vendored package is top-level, so drop the
+`apex_sdk.` prefix (`from gym_v1.player import Player, serve`). The classes and signatures are
+identical either way.
 
 **Player** — wrap the submission in a `Player` and serve it:
 
 ```python
-from apex_sdk.gym_v1 import Player, serve
+from apex_sdk.gym_v1 import Player, serve      # vendored: from gym_v1.player import Player, serve
 
 class MyPlayer(Player):
     def reset(self, match_id, player_index, seed, config): ...
@@ -81,7 +87,7 @@ serve(MyPlayer(), port=8000)   # exposes /health /reset /act
 **Referee** — implement the rules and let the harness handle env + result.json:
 
 ```python
-from apex_sdk.gym_v1 import Referee, GameResult, PlayerClient
+from apex_sdk.gym_v1 import Referee, GameResult, PlayerClient   # vendored: from gym_v1.referee / gym_v1.client
 
 class MyReferee(Referee):
     def play_game(self, ctx, players: list[PlayerClient]) -> GameResult:
