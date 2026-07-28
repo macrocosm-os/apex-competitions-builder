@@ -2,7 +2,7 @@
 
 Fill this document completely and submit it with your [**Competition onboarding
 issue**](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)
-on the SDK repo (`macrocosm-os/apex-competitions-builder`) — the form has a field for
+on the toolkit repo (`macrocosm-os/apex-competitions-builder`) — the form has a field for
 it, alongside a description of the competition, your repo URL, released tag,
 and image refs + digests. Macrocosmos reviews it, copies your `spec.yaml`
 into the private registry, and activates it on stage — where your baseline
