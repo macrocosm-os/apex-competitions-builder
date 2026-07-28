@@ -1,8 +1,10 @@
 # Competition Onboarding Manifest: `<competition_id>`
 
-Fill this document completely and attach it to your **Competition onboarding
-issue** on this repo (together with your repo URL, released tag,
-and image refs + digests). Macrocosmos reviews it, copies your `spec.yaml`
+Fill this document completely and submit it with your [**Competition onboarding
+issue**](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
+on the SDK repo (`macrocosm-os/apex-competitions-sdk`) — the form has a field for
+it, alongside a description of the competition, your repo URL, released tag,
+and image refs + digests. Macrocosmos reviews it, copies your `spec.yaml`
 into the private registry, and activates it on stage — where your baseline
 runs a staging round — before going live. Incomplete sections are the most
 common cause of a delayed launch.

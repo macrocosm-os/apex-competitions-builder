@@ -39,6 +39,21 @@ skills/apex-competition-builder/HANDOFF.md            # the onboarding manifest 
 **2. Fork the worked example:** https://github.com/macrocosm-os/apex-competition-hello-world — a
 complete, buildable competition laid out exactly like the repo you are about to write.
 
+**3. Get it reviewed.** A finished competition isn't done — Macrocosmos has to review and activate
+it, and the registry that does that is private, so there is nothing to PR. The only way in is to
+**open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
+on this repo** (`macrocosm-os/apex-competitions-sdk`). Have ready:
+
+- a description of the competition and the success statement (what a winning solution should *be*,
+  beyond the score),
+- the filled `skills/apex-competition-builder/HANDOFF.md`,
+- the competition repo URL and released tag,
+- the player and referee image refs + digests (`sha256:…`, never a tag).
+
+Do not open that issue on the user's behalf without their say-so — it's a public request to another
+org, and the digests must come from a real signed release, not placeholders. Prepare the content and
+let them file it.
+
 Then `docs/authoring.md` for the full mechanics.
 
 ### The one rule agents most often break

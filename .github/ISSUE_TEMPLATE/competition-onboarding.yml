@@ -13,6 +13,37 @@ body:
         Before filing, make sure `apex-dev preflight` and `apex-dev run` pass locally
         (see [docs/authoring.md](https://github.com/macrocosm-os/apex-competitions-sdk/blob/main/docs/authoring.md))
         — if it passes locally it passes the platform's sync-time validation.
+  - type: textarea
+    id: description
+    attributes:
+      label: What is the competition?
+      description: >
+        A few sentences a reviewer can read cold: what problem miners solve, what they submit,
+        and what scalar scores it. Then your success statement — what a winning solution should
+        *be* in domain terms, beyond the score (§1 of the builder skill).
+      placeholder: |
+        Miners submit an ONNX policy that controls one signalized intersection. Each simulated
+        second it sees the intersection's local state and holds or switches phase. raw_score is
+        mean per-vehicle delay in seconds, lower is better.
+
+        Success statement: a matching policy we would actually deploy — improves session quality
+        without starving small providers, using resources a real client has.
+    validations:
+      required: true
+
+  - type: textarea
+    id: handoff
+    attributes:
+      label: HANDOFF.md
+      description: >
+        Paste your filled onboarding manifest, or link to it in your repo at the released tag.
+        Template: skills/apex-competition-builder/HANDOFF.md — goal statement, ops proposal,
+        evaluation-sizing evidence, and the threat-model questionnaire. Incomplete sections are
+        the most common cause of a delayed launch.
+      render: markdown
+    validations:
+      required: true
+
   - type: input
     id: competition-id
     attributes:
@@ -65,7 +96,7 @@ body:
     id: referee-digest
     attributes:
       label: Referee image digest
-      description: The referee image's pinned `sha256:...` digest (required for both `kind: solo` and `kind: duel`).
+      description: "The referee image's pinned `sha256:...` digest (required for both `kind: solo` and `kind: duel`)."
       placeholder: sha256:...
     validations:
       required: true
