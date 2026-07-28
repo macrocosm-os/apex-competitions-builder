@@ -35,10 +35,12 @@ partial progress still pays, so early policies have a gradient to climb.
 **raw_score = mean over all 120 course instances** (40 per difficulty). A new
 submission takes the lead by beating the top raw score by ≥ 1%.
 
-The released baseline (`baseline/baseline.onnx`, PPO, 15M steps) scores
-**0.487** — it runs ~9.7 m on average and hasn't cleared a course. Beating it
-is table stakes; the first policy that reliably completes courses scores > 1
-and laps the field.
+The released baseline (`baseline/baseline.onnx`, PPO, ~110M steps — see
+`baseline/PROVENANCE.md`) scores **0.696**: it runs at ~3.5 m/s, completes
+most easy courses in ~5–6 s and some mediums, but clears no hard courses and
+still falls on ~80% of the full mix. Beating it means out-running it or
+out-surviving it; a policy that reliably completes all three tiers scores
+> 1.3 and laps the field.
 
 Courses are derived from a per-round master seed injected into the referee:
 every submission in a round runs the exact same 120 courses, and resubmitting

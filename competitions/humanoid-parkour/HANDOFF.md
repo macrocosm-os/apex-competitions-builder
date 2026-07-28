@@ -45,7 +45,7 @@ divergence):
 
 | Item | Where | Done |
 |---|---|---|
-| Competition repo (public) + released tag | https://github.com/macrocosm-os/apex-competition-humanoid-parkour @ `v0.1.0` | ☑ |
+| Competition repo (public) + released tag | https://github.com/macrocosm-os/apex-competition-humanoid-parkour @ `v0.1.1` | ☑ |
 | `spec.yaml` (`apex.competition.v1`) — `apex-dev preflight` passes | `spec.yaml` (repo root; preflight ✓ 2026-07-27) | ☑ |
 | Player image | `ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-player@sha256:f03b38e1d4608ad311e413a6a5a036beb30e2899f5a77a8a0b8fd5524310c3da` (cosign-signed on tag v0.1.0) | ☑ |
 | Referee image | `ghcr.io/macrocosm-os/apex-competition-humanoid-parkour-referee@sha256:4fec12451136aafacb53577a1e30418110ded543a65ebfbbd768ea03a486b179` (cosign-signed on tag v0.1.0) | ☑ |
@@ -53,7 +53,7 @@ divergence):
 | Round-generation entrypoint (`generate_round`) — or "platform seed is enough" | Platform seed is enough: the referee derives all 120 courses deterministically from `SEED` via `SeedSequence` | ☑ |
 | Cosign identity + issuer (as declared in the spec `signature` block) | https://github.com/macrocosm-os/apex-competition-humanoid-parkour/.github/workflows/release.yml (keyless, GitHub OIDC; tag run 30307884778) | ☑ |
 | `input_schema` + input fixtures | `input.schema.json`, `fixtures/input.json` | ☑ |
-| Baseline submission (scores > 0 through the full player+referee loop) | `baseline/baseline.onnx` (PPO, 15M steps, recipe in `baseline/train_baseline.py`) — raw **0.4872** mean over 20 seeds at N=120 | ☑ |
+| Baseline submission (scores > 0 through the full player+referee loop) | `baseline/baseline.onnx` (PPO, ~110M steps; recipe `baseline/train_baseline.py` + extended low-LR consolidation, see `baseline/PROVENANCE.md`) — raw **0.6957** mean over 20 seeds at N=120, completes ~18% of courses | ☑ |
 | Miner-facing README | `README.md` (repo root) | ☑ |
 | Evidence of a full end-to-end run (local two-image run or stage round) | Local two-process run (real player server + real referee over HTTP): baseline raw 0.4916 on seed 0, deterministic across repeats; per-course breakdowns in §4 JSONs. Release CI also runs the full loop as a smoke test on every build. | ☑ |
 
@@ -69,7 +69,11 @@ versions. List every pin here:
   `onnxruntime==1.28.0`, `numpy==2.3.4` (player) — single-threaded ORT session
   for determinism
 - image digests: player `sha256:f03b38e1…c3da`, referee `sha256:4fec1245…b179`
-  (full digests in the deliverables table and spec.yaml)
+  (full digests in the deliverables table and spec.yaml; unchanged in v0.1.1 —
+  the baseline artifact is repo content, not image content)
+- baseline artifact sha256
+  `5e615c33c1ad2f9f1f01e96d56af6edf72c4775ae4d2de1d4973100a0d62a6f4`
+  (provenance: `baseline/PROVENANCE.md`)
 
 ## 3. Ops parameters (your proposal — each with a one-line reason tied to §1)
 
@@ -84,7 +88,7 @@ onboarding.
 | `defaults.round_length_in_days` | spec | 2 — deeper contest per round on identical courses; RL policies take real time to train, so 1-day rounds would thin out | 1–2 days |
 | `defaults.submission_reveal_days` | spec | 5 — a trained locomotion policy is genuine R&D (docs guidance: 4–7 where solutions carry real IP); protects a breakthrough long enough to pay for it | 1–7 days |
 | `defaults.lower_is_better` | spec | false — score rewards completion + speed (see §1 metric); pure lower-is-better time gives no gradient before anyone completes | — |
-| `defaults.baseline_raw_score` / `baseline_score` | spec | 0.487 / 0.0 — measured: mean over 20 master seeds at N=120 with the released baseline (§4) | measured, not guessed |
+| `defaults.baseline_raw_score` / `baseline_score` | spec | 0.696 / 0.0 — measured: mean over 20 master seeds at N=120 with the released baseline (§4) | measured, not guessed |
 | `resources` (per sandbox) | spec | 1 CPU / 1.5Gi — measured sim cost 0.39 ms per control step; baseline uses well under 50% | ~1 CPU / 1.5Gi (ceilings: stage 2 CPU / 2Gi, prod 4 CPU / 4Gi) |
 | `evaluate.timeout_s` / `referee.timeout_s` | spec | 900 / 900 — baseline eval measured ~15 s at N=120; worst case (survives all 900 steps on 120 courses) ≈ 5–7 min | median eval 1–10 min |
 | Per-move deadline (`deadline_ms`, gym_v1) | referee config (round input) | 500 ms — typical policy inference is ~1 ms; 500 ms tolerates jitter while forcing CPU-fast policies | 0.5–5 s |
@@ -98,14 +102,16 @@ Written evidence, not intent — run the procedure in
 
 - Instances per evaluation (N): **120** (40 easy / 40 medium / 40 hard,
   stratified). Sized up from an initial N=24 after measurement (below).
-- Measured σ_round across 20 master seeds with the trained PPO baseline
-  (15M steps, raw ≈ 0.487): **σ_round = 0.0133 at N=120** (0.0228 at N=24).
-  Per-seed scores at N=120: mean 0.4872, range 0.4518–0.5145 (full arrays in
-  `tools/` output JSONs, committed alongside this file as
-  `variance_baseline_N120.json` / `variance_5M_N120.json`).
+- Measured σ_round across 20 master seeds with the released baseline
+  (~110M steps, raw ≈ 0.696, completes ~18% of courses): **σ_round = 0.0333
+  at N=120** — completion/fall flips dominate the variance for mid-tier
+  policies. For the weaker 15M reference (raw ≈ 0.487, no completions):
+  σ_round = 0.0133 at N=120 (0.0228 at N=24). Per-seed arrays committed
+  alongside this file: `variance_baseline_N120.json` (released baseline),
+  `variance_15M_N120.json`, `variance_5M_N120.json`.
 - Typical top score and the resulting takeover margin (1%): baseline-era top
-  ≈ 0.49 → margin 0.0049; completion-era top ≈ 1.3–1.6 → margin 0.013–0.016.
-- Check: σ_round ≤ ¼ × margin? **No — 0.0133 > 0.0012 at baseline scores**,
+  ≈ 0.70 → margin 0.0070; completion-era top ≈ 1.3–1.6 → margin 0.013–0.016.
+- Check: σ_round ≤ ¼ × margin? **No — 0.0333 > 0.0017 at baseline scores**,
   and raising N cannot close it (σ ∝ 1/√N ⇒ N ≈ 8,800 needed; wall-time caps
   N near 240). We report this honestly rather than tune to pass, for three
   reasons we want to discuss at review (this is the promised sizing
@@ -120,9 +126,10 @@ Written evidence, not intent — run the procedure in
   resolution; (c) the ratio improves as the field matures: for policies that
   complete most courses the per-course score concentrates (variance comes
   only from the time bonus) while the margin triples.
-- Reference solutions rank consistently across all seeds? **Yes — 20/20.**
-  Baseline (raw 0.4872 ± 0.0133) vs. a 5M-step mid-training reference
-  (raw 0.2747 ± 0.0055): no overlap on any seed, ranks never swap.
+- Reference solutions rank consistently across all seeds? **Yes — 20/20 for
+  every pair.** Released baseline (0.6957 ± 0.0333) > 15M reference
+  (0.4872 ± 0.0133) > 5M reference (0.2747 ± 0.0055): no overlap between any
+  two on any seed, ranks never swap.
 - Total evaluation wall time at N=120: **~15 s measured for the baseline**;
   worst case (policy survives all 900 steps on all 120 courses) ≈ 5–7 min
   at ~0.4 ms sim + ~1–3 ms HTTP/inference per control step — fits

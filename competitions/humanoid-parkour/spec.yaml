@@ -1,6 +1,6 @@
 schema: apex.competition.v1
 id: humanoid_parkour
-version: 0.1.0
+version: 0.1.1
 display_name: "Humanoid Parkour"
 kind: solo
 process_type: cpu
@@ -36,8 +36,9 @@ input_schema:
 defaults:
   baseline_score: 0.0
   # Measured: mean over 20 master seeds at N=120 courses with the released
-  # PPO baseline (baseline/baseline.onnx); per-seed numbers in HANDOFF.md §4.
-  baseline_raw_score: 0.487
+  # PPO baseline (baseline/baseline.onnx, ~110M steps — see baseline/PROVENANCE.md);
+  # per-seed numbers in HANDOFF.md §4.
+  baseline_raw_score: 0.696
   round_length_in_days: 2
   submission_reveal_days: 5      # trained policies carry real R&D; protect them
   lower_is_better: false
