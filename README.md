@@ -109,7 +109,7 @@ digest** and can pull private packages, so visibility is a transparency choice, 
 1. Design with the skill; implement your player and referee images (vendored).
 2. `apex-dev preflight` passes; exercise the loop locally, then on stage.
 3. Keyless-cosign-sign your images, push by digest, tag a release.
-4. Open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
+4. Open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)
    with your repo URL, released tag, image refs + digests, and your filled `HANDOFF.md`.
 5. A maintainer reviews, copies your `spec.yaml` verbatim into the private
    `apex-competitions-registry`, and activates it on **stage first**, then prod.

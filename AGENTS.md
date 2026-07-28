@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents working with **apex-competitions-sdk**.
+Guidance for coding agents working with **apex-competitions-builder**.
 
 ## Read this first
 
@@ -41,8 +41,8 @@ complete, buildable competition laid out exactly like the repo you are about to 
 
 **3. Get it reviewed.** A finished competition isn't done — Macrocosmos has to review and activate
 it, and the registry that does that is private, so there is nothing to PR. The only way in is to
-**open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-sdk/issues/new?template=competition-onboarding.yml)
-on this repo** (`macrocosm-os/apex-competitions-sdk`). Have ready:
+**open a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)
+on this repo** (`macrocosm-os/apex-competitions-builder`). Have ready:
 
 - a description of the competition and the success statement (what a winning solution should *be*,
   beyond the score),

@@ -11,7 +11,7 @@ body:
         `spec.yaml` into the registry, reviews it, opens the registry PR, and activates it.
 
         Before filing, make sure `apex-dev preflight` and `apex-dev run` pass locally
-        (see [docs/authoring.md](https://github.com/macrocosm-os/apex-competitions-sdk/blob/main/docs/authoring.md))
+        (see [docs/authoring.md](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/docs/authoring.md))
         — if it passes locally it passes the platform's sync-time validation.
   - type: textarea
     id: description
