@@ -14,9 +14,8 @@ you get the schema, the wire protocol, a validation CLI, and the design skill.
 
 ## Start here
 
-**If you are an agent (or using one), read [AGENTS.md](AGENTS.md) first.**
-
-### → I want to build a competition
+**If you are an agent (or using one), read [AGENTS.md](AGENTS.md) first.** You are here to build a
+competition in **its own repo** — this one is the toolkit you read from, not something you change.
 
 Two things, in order:
 
@@ -39,11 +38,6 @@ Two things, in order:
    are about to write. It is also the reference for the vendoring pattern below.
 
 Then read [`docs/authoring.md`](docs/authoring.md) for the full mechanics.
-
-### → I want to change the SDK itself
-
-See [AGENTS.md](AGENTS.md) for the repo map, test/lint commands, and the constraints that aren't
-obvious from the source.
 
 ---
 
