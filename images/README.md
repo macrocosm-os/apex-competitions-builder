@@ -14,7 +14,7 @@ the round input at `/data/input.json` and reads the result from `/data/result.js
 
 ## Build context = repo root
 
-The SDK is not on PyPI yet, so these Dockerfiles install it by copying the SDK source
+The toolkit is not on PyPI yet, so these Dockerfiles install it by copying the toolkit source
 (`pyproject.toml`, `README.md`, `src/`) into the image and running `pip install`. That
 means **the build context must be the repo root**, and you pass the Dockerfile with `-f`:
 
@@ -35,7 +35,7 @@ its own command (and for the player, the platform overrides it with
 > the base locally and will **fail in your release CI**. Today, copy `src/apex_sdk/gym_v1/` into
 > your competition repo and build `FROM python:3.12-slim`, importing the top-level `gym_v1` — see
 > [apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world)
-> and `docs/authoring.md` § "How your image gets the SDK". The pattern below is the intended
+> and `docs/authoring.md` § "How your image gets the toolkit". The pattern below is the intended
 > future once these bases are published.
 
 ```dockerfile

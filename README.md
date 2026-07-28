@@ -1,6 +1,6 @@
 # apex-competitions-builder
 
-The public SDK for building [Apex](https://macrocosmos.ai) competitions (Bittensor Subnet 1).
+The public toolkit for building [Apex](https://macrocosmos.ai) competitions (Bittensor Subnet 1).
 
 A competition is a **declarative, versioned, signed spec** (`apex.competition.v1`) plus the
 container images that run it. The platform never imports your code — it validates your spec,
