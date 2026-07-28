@@ -53,7 +53,7 @@ Both solo and duel need a **player** image and a **referee** image. The
 complete, buildable pair (`player/`, `referee/`) — read it alongside this section. Solo is just a
 1-player duel.
 
-**How your image gets the SDK — vendor it; do NOT build FROM the base images.**
+**How your image gets the toolkit — vendor it; do NOT build FROM the base images.**
 
 - ✅ **Vendor (do this).** Copy this repo's `src/apex_sdk/gym_v1/` into your competition repo and
   build on a stock base (`FROM python:3.12-slim`); import the top-level package — `from
@@ -62,13 +62,13 @@ complete, buildable pair (`player/`, `referee/`) — read it alongside this sect
   pattern that builds in your own repo's release CI. hello-world's
   [`player/Dockerfile`](https://github.com/macrocosm-os/apex-competition-hello-world/blob/main/player/Dockerfile)
   and its README's re-vendoring snippet show the whole mechanic.
-- ❌ **Do NOT use `FROM apex-player-base` / `apex-referee-base`.** They bake the SDK in (so you'd
+- ❌ **Do NOT use `FROM apex-player-base` / `apex-referee-base`.** They bake the toolkit in (so you'd
   import `apex_sdk.gym_v1`), but they are **not published to any registry**, so the build only
   resolves on a machine that has `docker build`-ed the base locally — it will **fail in your release
   CI**. This is the intended future once the bases are published; it is not usable now.
 
 The snippets below use the `apex_sdk.gym_v1` import root because that's how the package is named
-**inside this SDK repo**. In your competition repo the vendored package is top-level, so drop the
+**inside this repo**. In your competition repo the vendored package is top-level, so drop the
 `apex_sdk.` prefix (`from gym_v1.player import Player, serve`). The classes and signatures are
 identical either way.
 

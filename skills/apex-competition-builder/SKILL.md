@@ -24,7 +24,7 @@ A competition is a **declarative, versioned, signed spec** (`apex.competition.v1
 | # | Deliverable | What it is |
 |---|---|---|
 | 1 | **`spec.yaml`** | The competition itself: kind (`solo`/`duel`), resources, submission contract, screening config, round defaults, entrypoints, images, cosign identity. Copy [hello-world's `spec.yaml`](https://github.com/macrocosm-os/apex-competition-hello-world/blob/main/spec.yaml) and edit. |
-| 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. **Vendor the SDK's `gym_v1/` into your repo and build on `FROM python:3.12-slim`** — do **not** use `FROM apex-player-base` (not usable yet; see *Getting the SDK into your images* below). Digest-pinned, cosign-signed. |
+| 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. **Vendor the toolkit's `gym_v1/` into your repo and build on `FROM python:3.12-slim`** — do **not** use `FROM apex-player-base` (not usable yet; see *Getting the toolkit into your images* below). Digest-pinned, cosign-signed. |
 | 3 | **Referee image** | Competition-owned scorer. Holds ALL domain logic: game rules, datasets, ground truth, scoring. Drives the player(s) over the per-job network and writes `/data/result.json`. Required for both solo and duel. |
 | 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: an image-driven command that writes the round's tasks to a file at round start. Omit it if the platform-injected per-round seed is enough. |
 | 5 | **Layer-2 screen image** (optional) | `entrypoints.screen`: bespoke behavioural checks in their **own** image (exit 0 = pass), so secret checks stay isolated from the player image even if the player image is made public. Aim to not need one — see design step 2. |
@@ -120,18 +120,18 @@ Miners are adversarial, well-resourced, and patient. Before finalizing the desig
 
 ## The runtime contract (what your images must implement)
 
-Full contracts with docstrings live in the SDK (`src/apex_sdk/gym_v1/`, `docs/authoring.md`); the essentials:
+Full contracts with docstrings live in the toolkit (`src/apex_sdk/gym_v1/`, `docs/authoring.md`); the essentials:
 
-**Getting the SDK into your images — vendor it; do NOT build FROM the base images.** The `Player`/`Referee`/`GameResult`/`PlayerClient` classes below ship in the SDK. There is one pattern you should use today and one you must avoid:
+**Getting the toolkit into your images — vendor it; do NOT build FROM the base images.** The `Player`/`Referee`/`GameResult`/`PlayerClient` classes below ship in the toolkit. There is one pattern you should use today and one you must avoid:
 
-- ✅ **Vendor (do this).** Copy the SDK's `src/apex_sdk/gym_v1/` into your competition repo, build on `FROM python:3.12-slim`, and import the top-level package — `from gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`, `from gym_v1.client import PlayerClient`. This is what every shipped competition does and the only pattern that builds in your own repo's release CI. The [hello-world example repo](https://github.com/macrocosm-os/apex-competition-hello-world) does exactly this — copy its `player/`, `referee/`, and `.github/workflows/release.yml` layout.
+- ✅ **Vendor (do this).** Copy the toolkit's `src/apex_sdk/gym_v1/` into your competition repo, build on `FROM python:3.12-slim`, and import the top-level package — `from gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`, `from gym_v1.client import PlayerClient`. This is what every shipped competition does and the only pattern that builds in your own repo's release CI. The [hello-world example repo](https://github.com/macrocosm-os/apex-competition-hello-world) does exactly this — copy its `player/`, `referee/`, and `.github/workflows/release.yml` layout.
 - ❌ **Do NOT use `FROM apex-player-base` / `apex-referee-base` (and their `apex_sdk.gym_v1` import root) in your competition.** Those base images are **not published to any registry**, so the build only resolves on a machine that has `docker build`-ed the base locally — it will **fail in your release CI**. Build-FROM-base is the *intended* future once the bases are published; it is not usable now.
 
-Caveat that will mislead you if you copy it blindly: `docs/authoring.md`'s snippets use the `apex_sdk.gym_v1` import root because that's the package name **inside the SDK repo**. In *your* competition repo the vendored package is top-level — drop the `apex_sdk.` prefix.
+Caveat that will mislead you if you copy it blindly: `docs/authoring.md`'s snippets use the `apex_sdk.gym_v1` import root because that's the package name **inside the toolkit repo**. In *your* competition repo the vendored package is top-level — drop the `apex_sdk.` prefix.
 
-**Player image** — the platform writes the miner's artifact to `submission.target_path`, then runs `entrypoints.evaluate.command`. Your image must serve the declared `http_api` (`port`, `readiness_path`, `protocol`). For `gym_v1`, subclass the SDK's `Player` (`reset(match_id, player_index, seed, config)` / `act(observation, deadline_ms)`) and call `serve()` — it exposes `/health`, `/reset`, `/act`. A player that never becomes healthy within the startup budget is a typed failure attributed to the submission.
+**Player image** — the platform writes the miner's artifact to `submission.target_path`, then runs `entrypoints.evaluate.command`. Your image must serve the declared `http_api` (`port`, `readiness_path`, `protocol`). For `gym_v1`, subclass the toolkit's `Player` (`reset(match_id, player_index, seed, config)` / `act(observation, deadline_ms)`) and call `serve()` — it exposes `/health`, `/reset`, `/act`. A player that never becomes healthy within the startup budget is a typed failure attributed to the submission.
 
-**Referee image** — runs at `/app/referee.py` by convention; the platform injects `MATCH_ID`, `SEED`, `CONFIG_JSON`, `PLAYER_URLS`, `NUM_PLAYERS` and reads `/data/result.json`. For `gym_v1`, subclass the SDK's `Referee` and implement `play_game(ctx, players) -> GameResult` (`raw_scores`, `winner`, `terminal_reason`, `steps`, plus metadata). Contract rules that matter operationally:
+**Referee image** — runs at `/app/referee.py` by convention; the platform injects `MATCH_ID`, `SEED`, `CONFIG_JSON`, `PLAYER_URLS`, `NUM_PLAYERS` and reads `/data/result.json`. For `gym_v1`, subclass the toolkit's `Referee` and implement `play_game(ctx, players) -> GameResult` (`raw_scores`, `winner`, `terminal_reason`, `steps`, plus metadata). Contract rules that matter operationally:
 
 - **A referee crash (or missing/invalid `result.json`) is scored as a referee failure, not the submission's** — never write a zeroed result to paper over a bug; let it fail so it's attributed correctly.
 - **Typed failures, never silent zeros.** An invalid submission should produce a scoreable, explained outcome the miner can act on. A valid submission that simply performs badly gets a low score, not an error.
@@ -148,13 +148,13 @@ Caveat that will mislead you if you copy it blindly: `docs/authoring.md`'s snipp
 ## Test locally, then ship
 
 ```bash
-pip install -e .        # the SDK
+pip install -e .        # the toolkit
 apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
              --submission ./player/submission.py --dockerfile ./player/Dockerfile
 ```
 
-`apex-dev preflight` validates your spec against `apex.competition.v1` (including resource ceilings) and your fixture against `input_schema` — a spec that passes preflight is one the platform will accept at sync time. `apex-dev run` validates the run arguments and prints the resolved execution plan; as of now it does **not** yet execute the player+referee pair locally (that harness is an SDK follow-up), so exercise the full loop by running your two images by hand on a shared Docker network with the injected env vars, and validate on stage before launch. Test the sandboxed leg honestly: `docker run` your player with egress blocked and the spec's resource limits.
+`apex-dev preflight` validates your spec against `apex.competition.v1` (including resource ceilings) and your fixture against `input_schema` — a spec that passes preflight is one the platform will accept at sync time. `apex-dev run` validates the run arguments and prints the resolved execution plan; as of now it does **not** yet execute the player+referee pair locally (that harness is a toolkit follow-up), so exercise the full loop by running your two images by hand on a shared Docker network with the injected env vars, and validate on stage before launch. Test the sandboxed leg honestly: `docker run` your player with egress blocked and the spec's resource limits.
 
 ## Build checklist
 
@@ -165,8 +165,8 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] Metric + baselines (`defaults.baseline_raw_score`) + anti-Goodhart gates defined.
 - [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds).
 - [ ] Security checklist passed (`reference/security-checklist.md`).
-- [ ] `spec.yaml` written from the SDK example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
-- [ ] Player + referee images implemented with the SDK's `gym_v1/` **vendored** into the repo (`FROM python:3.12-slim`, top-level `gym_v1` imports), not `FROM apex-*-base`; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
+- [ ] `spec.yaml` written from the toolkit example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
+- [ ] Player + referee images implemented with the toolkit's `gym_v1/` **vendored** into the repo (`FROM python:3.12-slim`, top-level `gym_v1` imports), not `FROM apex-*-base`; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
 - [ ] Miner README written — everything a miner needs to iterate locally (including how to run your player image against their own submission), nothing that leaks ground truth.
 - [ ] Ops parameters proposed with reasons tied to the success statement: `round_length_in_days` (production runs 1–2), `submission_reveal_days` (1–7), submission fee in USD (≈$1 in production), incentive weight (negotiated with Macrocosmos; active competitions run 0.02–0.05), and for duels `players_per_match` / `num_games_default` / `swap_sides`. Trade-offs: `reference/evaluation-design.md` § Operating parameters.
 
