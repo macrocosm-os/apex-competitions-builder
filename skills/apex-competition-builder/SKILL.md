@@ -1,6 +1,6 @@
 ---
 name: apex-competition-builder
-description: Build a competition for the Apex platform (Bittensor Subnet 1) as an external designer. Use when designing a new Apex competition or authoring its `apex.competition.v1` spec, player image, and referee image for the apex-competitions-sdk flow. Covers submission-format design, anti-exploit hardening, evaluation sizing for statistical significance, and resource/timeout budgeting.
+description: Build a competition for the Apex platform (Bittensor Subnet 1) as an external designer. Use when designing a new Apex competition or authoring its `apex.competition.v1` spec, player image, and referee image for the apex-competitions-builder flow. Covers submission-format design, anti-exploit hardening, evaluation sizing for statistical significance, and resource/timeout budgeting.
 ---
 
 # Building an Apex Competition (External Designer Guide)
