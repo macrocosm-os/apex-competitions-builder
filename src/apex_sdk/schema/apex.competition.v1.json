@@ -98,7 +98,7 @@
     },
     "input_schema": {
       "type": "object",
-      "description": "JSON Schema for the round input data. Either an inline schema or a $ref to a sibling file (resolved by the SDK / syncer).",
+      "description": "JSON Schema for the round input data. Either an inline schema or a $ref to a sibling file (resolved by the toolkit / syncer).",
       "properties": {
         "$ref": { "type": "string" }
       }

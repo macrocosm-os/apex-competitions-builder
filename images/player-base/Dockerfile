@@ -25,7 +25,7 @@ RUN mkdir -p /app /data && chown -R 1000:1000 /app /data
 
 WORKDIR /app
 
-# Install the SDK. The SDK is stdlib-only aside from pyyaml/jsonschema, so this stays
+# Install the toolkit. It is stdlib-only aside from pyyaml/jsonschema, so this stays
 # small. Copy only what the build backend needs to produce the wheel.
 COPY pyproject.toml README.md /src/
 COPY src/ /src/src/

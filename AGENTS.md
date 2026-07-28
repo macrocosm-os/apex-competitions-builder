@@ -12,13 +12,13 @@ Your competition belongs in **its own repo**. The overwhelmingly likely correct 
 read this repo and write somewhere else. In particular:
 
 - **Do not add your competition to this repo** — not under `examples/`, not anywhere.
-- **Do not edit the SDK to make your competition work.** If the schema rejects your spec, the spec
+- **Do not edit the toolkit to make your competition work.** If the schema rejects your spec, the spec
   is wrong. If `gym_v1` doesn't do what you need, write it in your own image, not here.
 - **Do not vendor by importing from an installed `apex_sdk`** in your competition images. Copy
   `src/apex_sdk/gym_v1/` into your repo — see the vendoring rule below.
 
-Only change this repo if a human explicitly asked you to change **the SDK itself**. If so, skip to
-[Changing the SDK](#changing-the-sdk).
+Only change this repo if a human explicitly asked you to change **the toolkit itself**. If so, skip to
+[Changing the toolkit](#changing-the-toolkit).
 
 ## Building a competition
 
@@ -56,7 +56,7 @@ now.
 
 ---
 
-## Changing the SDK
+## Changing the toolkit
 
 **Only if a human explicitly asked you to modify this repo.** Otherwise see above.
 
@@ -93,7 +93,7 @@ to make a test pass. Additive, backward-compatible changes only; anything else n
 version and coordination with the platform.
 
 **`gym_v1` must stay stdlib-only.** It exists to be copied into competition repos. A runtime
-dependency there becomes a dependency every competition image has to install and pin. The SDK's own
+dependency there becomes a dependency every competition image has to install and pin. The toolkit's own
 runtime surface (`pyyaml`, `jsonschema`) is deliberately tiny too.
 
 **Resource ceilings are real.** `ENV_CEILINGS` in `spec.py` (stage 2 CPU / 2Gi, prod 4 CPU / 4Gi)
