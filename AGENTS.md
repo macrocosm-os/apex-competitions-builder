@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents working with **apex-competitions-builder**.
+Guidance for coding agents working with **apex-competitions-sdk**.
 
 ## Read this first
 
