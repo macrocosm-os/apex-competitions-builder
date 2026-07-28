@@ -11,24 +11,35 @@ somewhere else.
 
 ## Start here
 
-**1. Read the skill: [`skills/apex-competition-builder/SKILL.md`](skills/apex-competition-builder/SKILL.md)**
-— the design guide. Read it fully before designing anything; if your harness supports skills,
-invoke `apex-competition-builder`.
+Two ways in, depending on whether you're driving or your agent is.
 
-| File | What it is |
-|------|-----------|
-| [`SKILL.md`](skills/apex-competition-builder/SKILL.md) | The guide. Start here. |
-| [`reference/evaluation-design.md`](skills/apex-competition-builder/reference/evaluation-design.md) | Statistical sizing, seeds, timeouts, resource budgeting, operating parameters. |
-| [`reference/security-checklist.md`](skills/apex-competition-builder/reference/security-checklist.md) | The anti-exploit checklist, with rationale. |
-| [`HANDOFF.md`](skills/apex-competition-builder/HANDOFF.md) | The onboarding manifest you fill in and submit. |
+### Building with an agent
 
-**2. Fork the worked example: [macrocosm-os/apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world)**
-— a complete, buildable solo competition (spec, schemas, player image, referee image, baseline
-submission, signing release workflow), laid out exactly like the repo you're about to write.
+Point it at **[`skills/apex-competition-builder/`](skills/apex-competition-builder/)** — that's
+what the skill is there for. In Claude Code and similar harnesses, invoke
+`apex-competition-builder`; otherwise tell the agent to read
+[`SKILL.md`](skills/apex-competition-builder/SKILL.md) and its reference files before designing
+anything. It'll walk the design order with you and produce the spec, both images, and a filled
+`HANDOFF.md`.
 
-**3. Then [`docs/authoring.md`](docs/authoring.md)** for the full mechanics.
+Agents should also read [AGENTS.md](AGENTS.md).
 
-Agents: also read [AGENTS.md](AGENTS.md).
+### Building it yourself
+
+1. **[`docs/authoring.md`](docs/authoring.md)** — the authoring flow end to end. Start here; it's
+   written to be read by a person.
+2. **Fork [macrocosm-os/apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world)**
+   — a complete, buildable solo competition (spec, schemas, player image, referee image, baseline
+   submission, signing release workflow), laid out exactly like the repo you're about to write.
+3. **Reach for the skill's files when you hit design decisions.** They're reference material, not a
+   tutorial — you don't need to read them front to back:
+
+   | File | Consult it when you're deciding… |
+   |------|-----------|
+   | [`SKILL.md`](skills/apex-competition-builder/SKILL.md) | …the shape of the competition: submission format, solo vs duel, the metric and its anti-gaming gates. |
+   | [`reference/evaluation-design.md`](skills/apex-competition-builder/reference/evaluation-design.md) | …how many tasks per evaluation, seeds, timeouts, resources, round length and reveal delay. |
+   | [`reference/security-checklist.md`](skills/apex-competition-builder/reference/security-checklist.md) | …whether miners can game it. Walk this one end to end before you ship. |
+   | [`HANDOFF.md`](skills/apex-competition-builder/HANDOFF.md) | …nothing — it's the manifest you fill in and submit at onboarding. |
 
 ## What's in here
 
