@@ -1,0 +1,95 @@
+name: Changelog guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions: {}
+
+concurrency:
+  group: changelog-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    name: Enforce changelog contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # Labels decide whether this is a release PR or may skip a fragment.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Enforce changelog and version rules
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          labels="$(gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name')"
+          if printf '%s\n' "${labels}" | grep -qx release; then
+            echo "Release PR: generated changelog and version changes are allowed."
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
+          if printf '%s\n' "${changed[@]}" | grep -qx CHANGELOG.md; then
+            changelog_diff="$(git diff "${BASE_SHA}...${HEAD_SHA}" -- CHANGELOG.md || true)"
+            if printf '%s\n' "${changelog_diff}" | grep -q 'towncrier release notes start' \
+              && ! printf '%s\n' "${changelog_diff}" | grep -qE '^\+### '; then
+              echo "Allowing the one-time towncrier changelog bootstrap."
+            else
+              echo "::error::Feature PRs must add changelog.d fragments, not edit CHANGELOG.md."
+              exit 1
+            fi
+          fi
+
+          version_paths=(
+            pyproject.toml
+            uv.lock
+            .codex-plugin/plugin.json
+            .grok-plugin/plugin.json
+            .grok-plugin/marketplace.json
+            .claude-plugin/plugin.json
+            .claude-plugin/marketplace.json
+          )
+          for path in "${version_paths[@]}"; do
+            git cat-file -e "${BASE_SHA}:${path}" 2>/dev/null || continue
+            git cat-file -e "${HEAD_SHA}:${path}" 2>/dev/null || continue
+            base_version="$(git show "${BASE_SHA}:${path}" | python3 .github/scripts/read_release_version.py "${path}")"
+            head_version="$(git show "${HEAD_SHA}:${path}" | python3 .github/scripts/read_release_version.py "${path}")"
+            if [ "${base_version}" != "${head_version}" ]; then
+              echo "::error::Feature PR changed ${path} version ${base_version} -> ${head_version}."
+              echo "Run Actions -> Prepare release instead."
+              exit 1
+            fi
+          done
+
+          if printf '%s\n' "${labels}" | grep -qx skip-changelog; then
+            echo "skip-changelog label present."
+            exit 0
+          fi
+
+          touches_product=0
+          has_fragment=0
+          for path in "${changed[@]}"; do
+            case "${path}" in
+              src/*|skills/*|.codex-plugin/*|.grok-plugin/*|.claude-plugin/*)
+                touches_product=1
+                ;;
+              changelog.d/*.md)
+                [ "$(basename "${path}")" = README.md ] || has_fragment=1
+                ;;
+            esac
+          done
+          if [ "${touches_product}" -eq 1 ] && [ "${has_fragment}" -eq 0 ]; then
+            echo "::error::Product changes need a changelog.d fragment or skip-changelog label."
+            exit 1
+          fi
