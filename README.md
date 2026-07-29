@@ -30,6 +30,17 @@ somewhere else.
    | [`reference/security-checklist.md`](skills/apex-competition-builder/reference/security-checklist.md) | Whether miners can game it. Walked end to end before you ship. |
    | [`HANDOFF.md`](skills/apex-competition-builder/HANDOFF.md) | The onboarding manifest, filled in and submitted at the end. |
 
+   To create the separate competition repository reproducibly:
+
+   ```bash
+   python3 skills/apex-competition-builder/scripts/scaffold_competition.py \
+     ../apex-competition-<name>
+   ```
+
+   The scaffold checks out the worked example commit and re-vendors `gym_v1` from the toolkit
+   release pinned by the installed skill. It refuses to create competition code inside this
+   toolkit.
+
 Agents: also read [AGENTS.md](AGENTS.md).
 
 ## What's in here

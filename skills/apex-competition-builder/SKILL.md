@@ -9,13 +9,28 @@ Apex is a competition platform running as Bittensor Subnet 1. You (the competiti
 
 Read first (public):
 
-- This repo — schema, base images, `apex-dev` CLI: start with [docs/authoring.md](../../docs/authoring.md)
+- This repo — schema, base images, `apex-dev` CLI: start with the
+  [authoring guide](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/docs/authoring.md)
 - The worked example competition, laid out exactly like the repo you'll build (fork it): https://github.com/macrocosm-os/apex-competition-hello-world
 - Full docs index (agent-friendly, one fetch): https://docs.macrocosmos.ai/llms.txt
 - Platform overview: https://docs.macrocosmos.ai/subnets/subnet-1-apex
 - How live competitions describe their scoring: https://docs.macrocosmos.ai/subnets/subnet-1-apex/subnet-1-current-competitions
 - Incentive mechanism (emissions, burn, winner-takes-all): https://docs.macrocosmos.ai/subnets/subnet-1-apex/incentive-mechanism
 - Miner-side view (CLI, submission formats, per-competition READMEs and baselines): https://github.com/macrocosm-os/apex
+
+## Start in a separate competition repository
+
+Never implement a competition inside the toolkit or an installed copy of this skill. Ask the user
+for a destination directory, then run the bundled scaffold from this skill's directory:
+
+```bash
+python3 scripts/scaffold_competition.py /absolute/path/to/apex-competition-<name>
+```
+
+The scaffold clones the worked example, renames its `origin` remote to `template-upstream`, and
+re-vendors `gym_v1` from the toolkit release pinned by the script. It refuses destinations inside
+an `apex-competitions-builder` checkout. After scaffolding, perform every design and implementation
+step in the new repository.
 
 ## What you deliver
 
@@ -127,7 +142,10 @@ Full contracts with docstrings live in the toolkit (`src/apex_sdk/gym_v1/`, `doc
 - ✅ **Vendor (do this).** Copy the toolkit's `src/apex_sdk/gym_v1/` into your competition repo, build on `FROM python:3.12-slim`, and import the top-level package — `from gym_v1.player import Player, serve`, `from gym_v1.referee import Referee, GameResult`, `from gym_v1.client import PlayerClient`. This is what every shipped competition does and the only pattern that builds in your own repo's release CI. The [hello-world example repo](https://github.com/macrocosm-os/apex-competition-hello-world) does exactly this — copy its `player/`, `referee/`, and `.github/workflows/release.yml` layout.
 - ❌ **Do NOT use `FROM apex-player-base` / `apex-referee-base` (and their `apex_sdk.gym_v1` import root) in your competition.** Those base images are **not published to any registry**, so the build only resolves on a machine that has `docker build`-ed the base locally — it will **fail in your release CI**. Build-FROM-base is the *intended* future once the bases are published; it is not usable now.
 
-Caveat that will mislead you if you copy it blindly: `docs/authoring.md`'s snippets use the `apex_sdk.gym_v1` import root because that's the package name **inside the toolkit repo**. In *your* competition repo the vendored package is top-level — drop the `apex_sdk.` prefix.
+Caveat that will mislead you if you copy it blindly: the
+[authoring guide](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/docs/authoring.md)'s
+snippets use the `apex_sdk.gym_v1` import root because that's the package name **inside the toolkit
+repo**. In *your* competition repo the vendored package is top-level — drop the `apex_sdk.` prefix.
 
 **Player image** — the platform writes the miner's artifact to `submission.target_path`, then runs `entrypoints.evaluate.command`. Your image must serve the declared `http_api` (`port`, `readiness_path`, `protocol`). For `gym_v1`, subclass the toolkit's `Player` (`reset(match_id, player_index, seed, config)` / `act(observation, deadline_ms)`) and call `serve()` — it exposes `/health`, `/reset`, `/act`. A player that never becomes healthy within the startup budget is a typed failure attributed to the submission.
 
@@ -185,5 +203,8 @@ Updating a live competition is the same loop: bump `version` in your repo (the `
 - `reference/evaluation-design.md` — statistical sizing, seeds, timeouts, resource budgeting, operating guidance.
 - `reference/security-checklist.md` — the full anti-exploit checklist with rationale.
 - `HANDOFF.md` — the fillable onboarding manifest (deliverables, ops proposal, sizing justification, threat-model questionnaire).
-- This repo (authoritative for all mechanics): [docs/authoring.md](../../docs/authoring.md), [the spec schema](../../src/apex_sdk/schema/apex.competition.v1.json), [src/apex_sdk/gym_v1/](../../src/apex_sdk/gym_v1/) — the package you vendor.
+- This repo (authoritative for all mechanics):
+  [authoring guide](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/docs/authoring.md),
+  [spec schema](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/src/apex_sdk/schema/apex.competition.v1.json),
+  and [gym_v1](https://github.com/macrocosm-os/apex-competitions-builder/tree/main/src/apex_sdk/gym_v1) — the package you vendor.
 - [apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world) — the worked example repo to fork.
