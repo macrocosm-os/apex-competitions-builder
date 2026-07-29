@@ -11,35 +11,26 @@ somewhere else.
 
 ## Start here
 
-1. **[`docs/authoring.md`](docs/authoring.md)** — the authoring flow end to end. Read this first for
-   how the pieces fit together.
-2. **Fork [macrocosm-os/apex-competition-hello-world](https://github.com/macrocosm-os/apex-competition-hello-world)**
-   — a complete, buildable solo competition (spec, schemas, player image, referee image, baseline
-   submission, signing release workflow), laid out exactly like the repo you're about to write.
-3. **Point your agent at [`skills/apex-competition-builder/`](skills/apex-competition-builder/) to
-   design and build the competition.** That's what the skill is for. In Claude Code and similar
-   harnesses, invoke `apex-competition-builder`; otherwise tell the agent to read
-   [`SKILL.md`](skills/apex-competition-builder/SKILL.md) and its reference files before designing
-   anything. It walks the design order with you and produces the spec, both images, and a filled
-   `HANDOFF.md`.
+1. **Give your agent access to
+   [`apex-competition-builder`](skills/apex-competition-builder/).** Invoke the installed skill by
+   name, or point a compatible agent at this repository.
+2. **Ask the agent to start the competition:**
 
-   | What the agent works through | Covers |
-   |------|-----------|
-   | [`SKILL.md`](skills/apex-competition-builder/SKILL.md) | The shape of the competition: submission format, solo vs duel, the metric and its anti-gaming gates. |
-   | [`reference/evaluation-design.md`](skills/apex-competition-builder/reference/evaluation-design.md) | How many tasks per evaluation, seeds, timeouts, resources, round length and reveal delay. |
-   | [`reference/security-checklist.md`](skills/apex-competition-builder/reference/security-checklist.md) | Whether miners can game it. Walked end to end before you ship. |
-   | [`HANDOFF.md`](skills/apex-competition-builder/HANDOFF.md) | The onboarding manifest, filled in and submitted at the end. |
+   > Use apex-competition-builder to create a new Apex competition. Start by helping me define its
+   > success statement, then build it in a separate repository.
 
-   To create the separate competition repository reproducibly:
+3. **Let the agent drive the workflow.** It creates the separate repository, starts from the
+   organization-owned worked example, vendors `gym_v1`, validates the competition, and
+   prepares `HANDOFF.md`.
 
-   ```bash
-   python3 skills/apex-competition-builder/scripts/scaffold_competition.py \
-     ../apex-competition-<name>
-   ```
+The implementation details stay inside the skill:
 
-   The scaffold checks out the worked example commit and re-vendors `gym_v1` from the toolkit
-   release pinned by the installed skill. It refuses to create competition code inside this
-   toolkit.
+| What the agent works through | Covers |
+|------|-----------|
+| [`SKILL.md`](skills/apex-competition-builder/SKILL.md) | The shape of the competition: submission format, solo vs duel, the metric and its anti-gaming gates. |
+| [`reference/evaluation-design.md`](skills/apex-competition-builder/reference/evaluation-design.md) | How many tasks per evaluation, seeds, timeouts, resources, round length and reveal delay. |
+| [`reference/security-checklist.md`](skills/apex-competition-builder/reference/security-checklist.md) | Whether miners can game it. Walked end to end before you ship. |
+| [`HANDOFF.md`](skills/apex-competition-builder/HANDOFF.md) | The onboarding manifest, filled in and submitted at the end. |
 
 Agents: also read [AGENTS.md](AGENTS.md).
 
