@@ -1,0 +1,85 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver bump kind (ignored when version is set)
+        required: true
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Optional explicit X.Y.Z
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open release pull request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Create and push the release branch.
+      pull-requests: write # Open and label the release pull request.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Install release dependencies
+        run: uv sync --extra dev
+
+      - name: Prepare release files
+        id: prepare
+        env:
+          BUMP: ${{ inputs.bump }}
+          EXPLICIT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${EXPLICIT_VERSION}" ]; then
+            uv run python .github/scripts/prepare_release.py --version "${EXPLICIT_VERSION}"
+          else
+            uv run python .github/scripts/prepare_release.py --bump "${BUMP}"
+          fi
+          version="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "branch=release/v${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Open release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+          BRANCH: ${{ steps.prepare.outputs.branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+            echo "Branch ${BRANCH} already exists; refusing to overwrite it."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git"
+          git switch -c "${BRANCH}"
+          git add -A
+          git commit -m "chore(release): bump version to ${VERSION}"
+          git push -u origin HEAD
+          gh label create release --color 0E8A16 --description "Automated release PR" 2>/dev/null || true
+          gh pr create \
+            --title "chore(release): bump version to ${VERSION}" \
+            --body "Builds the changelog and bumps all plugin and skill release surfaces to v${VERSION}." \
+            --label release \
+            --base "${DEFAULT_BRANCH}" \
+            --head "${BRANCH}"

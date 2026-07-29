@@ -87,6 +87,8 @@ now.
 | `images/` | Base image Dockerfiles — unpublished, see the vendoring rule above. |
 | `tests/fixtures/solo/` | A test fixture spec. **Not** an example to copy. |
 | `.claude-plugin/`, `.codex-plugin/`, `.grok-plugin/`, `.agents/plugins/` | Installable plugin and marketplace manifests for the canonical skill. |
+| `.github/workflows/prepare-release.yml` | Opens the lockstep version/changelog release PR. |
+| `.github/workflows/tag-release.yml` | Tags a merged release PR and publishes its GitHub release. |
 
 ### Setup, test, lint
 
@@ -100,6 +102,10 @@ uv run black --check .
 CI (`.github/workflows/ci.yml`) runs those three on Python 3.11 and 3.12. Run them before proposing
 a change. Line length is **120** (`ruff` and `black` are both configured for it in
 `pyproject.toml`) — do not reformat to 88.
+
+Skill or plugin changes also require a `changelog.d/<issue-or-pr>.<type>.md` fragment. Do not bump
+versions or edit `CHANGELOG.md` in a feature PR. Use Actions → **Prepare release** to generate a
+reviewable release PR; merging it creates the version tag and GitHub release.
 
 ### Constraints that aren't obvious from the source
 
