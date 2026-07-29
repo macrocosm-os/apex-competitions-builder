@@ -54,9 +54,12 @@ npx skills add macrocosm-os/apex-competitions-builder -g -a codex -a gemini-cli
 
 OpenCode consumes the canonical Agent Skill directly; it does not need a separate plugin manifest.
 
-Codex and Grok can also install the repository as a native marketplace plugin:
+Claude Code, Codex, and Grok can also install the repository as a native marketplace plugin:
 
 ```bash
+claude plugin marketplace add macrocosm-os/apex-competitions-builder
+claude plugin install apex-competition-builder@apex-competitions-builder
+
 codex plugin marketplace add macrocosm-os/apex-competitions-builder
 codex plugin add apex-competition-builder@apex-competitions-builder
 
@@ -64,10 +67,11 @@ grok plugin marketplace add macrocosm-os/apex-competitions-builder
 grok plugin install apex-competition-builder --trust
 ```
 
-Update Agent Skills installs with `npx skills update apex-competition-builder -g`. Codex refreshes
-the marketplace with `codex plugin marketplace upgrade apex-competitions-builder`; rerun
-`codex plugin add` to install the newly published version. Update Grok with
-`grok plugin update apex-competition-builder`.
+Update Agent Skills installs with `npx skills update apex-competition-builder -g`. Claude Code
+refreshes this marketplace with
+`claude plugin marketplace update apex-competitions-builder`. Codex refreshes it with
+`codex plugin marketplace upgrade apex-competitions-builder`; rerun `codex plugin add` to install
+the newly published version. Update Grok with `grok plugin update apex-competition-builder`.
 
 Use one installation method per host to avoid loading the same skill twice. These commands make
 this repository an installable community marketplace. Listing it in a vendor-operated public
@@ -79,6 +83,7 @@ directory, while xAI accepts pinned-source pull requests to `xai-org/plugin-mark
 | Path | What it is |
 |------|-----------|
 | [`skills/apex-competition-builder/`](skills/apex-competition-builder/) | The design guide + agent skill. |
+| [`.claude-plugin/`](.claude-plugin/) | Claude Code plugin and marketplace manifests. |
 | [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json) | Codex plugin manifest for the canonical skill. |
 | [`.grok-plugin/`](.grok-plugin/) | Grok plugin and marketplace manifests. |
 | [`src/apex_sdk/gym_v1/`](src/apex_sdk/gym_v1/) | The wire protocol: `Player`/`serve`, `Referee`/`GameResult`/`RefereeContext`, `PlayerClient`. **The directory you vendor.** Stdlib-only. |

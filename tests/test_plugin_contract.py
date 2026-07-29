@@ -15,6 +15,10 @@ def test_plugin_versions_match_project_version() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     version = project["project"]["version"]
 
+    assert _json(".claude-plugin/plugin.json")["version"] == version
+    claude_plugins = _json(".claude-plugin/marketplace.json")["plugins"]
+    assert len(claude_plugins) == 1
+    assert claude_plugins[0]["version"] == version
     assert _json(".codex-plugin/plugin.json")["version"] == version
     assert _json(".grok-plugin/plugin.json")["version"] == version
     grok_plugins = _json(".grok-plugin/marketplace.json")["plugins"]
@@ -28,15 +32,21 @@ def test_plugin_manifests_use_canonical_skill_root() -> None:
         assert manifest["name"] == "apex-competition-builder"
         assert manifest["skills"] == "./skills/"
 
+    claude = _json(".claude-plugin/plugin.json")
+    assert claude["name"] == "apex-competition-builder"
+    assert "skills" not in claude
+
 
 def test_marketplaces_point_at_repository() -> None:
     expected = {
         "source": "url",
         "url": "https://github.com/macrocosm-os/apex-competitions-builder.git",
     }
+    claude = _json(".claude-plugin/marketplace.json")
     codex = _json(".agents/plugins/marketplace.json")
     grok = _json(".grok-plugin/marketplace.json")
 
+    assert claude["plugins"][0]["source"] == "./"
     assert codex["plugins"][0]["source"] == expected
     assert grok["plugins"][0]["source"] == "./"
     assert codex["plugins"][0]["policy"] == {

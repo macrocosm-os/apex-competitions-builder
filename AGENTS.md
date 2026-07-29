@@ -86,7 +86,7 @@ now.
 | `docs/authoring.md` | The authoring flow. Authoritative for mechanics. |
 | `images/` | Base image Dockerfiles — unpublished, see the vendoring rule above. |
 | `tests/fixtures/solo/` | A test fixture spec. **Not** an example to copy. |
-| `.codex-plugin/`, `.grok-plugin/`, `.agents/plugins/` | Codex and Grok plugin and marketplace manifests. |
+| `.claude-plugin/`, `.codex-plugin/`, `.grok-plugin/`, `.agents/plugins/` | Installable plugin and marketplace manifests for the canonical skill. |
 
 ### Setup, test, lint
 
