@@ -1,0 +1,38 @@
+{
+  "name": "apex-competition-builder",
+  "version": "0.3.0",
+  "description": "Design, implement, validate, and prepare Apex competitions for onboarding.",
+  "author": {
+    "name": "Macrocosmos.ai",
+    "url": "https://macrocosmos.ai"
+  },
+  "homepage": "https://github.com/macrocosm-os/apex-competitions-builder",
+  "repository": "https://github.com/macrocosm-os/apex-competitions-builder",
+  "license": "MIT",
+  "keywords": [
+    "apex",
+    "competition",
+    "bittensor",
+    "evaluation",
+    "agentic-development"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Apex Competition Builder",
+    "shortDescription": "Build and validate an Apex competition.",
+    "longDescription": "Guides an agent through Apex competition design, anti-exploit hardening, implementation in a separate repository, local validation, and the onboarding handoff.",
+    "developerName": "Macrocosmos.ai",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/macrocosm-os/apex-competitions-builder",
+    "defaultPrompt": [
+      "Create a new Apex competition",
+      "Review my Apex competition design",
+      "Prepare my competition for onboarding"
+    ]
+  }
+}
