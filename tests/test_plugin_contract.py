@@ -43,3 +43,9 @@ def test_marketplaces_point_at_repository() -> None:
         "installation": "AVAILABLE",
         "authentication": "ON_INSTALL",
     }
+
+
+def test_readme_documents_opencode_as_an_agent_skills_target() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "--skill apex-competition-builder -g -a opencode -y" in readme
+    assert "OpenCode consumes the canonical Agent Skill directly" in readme

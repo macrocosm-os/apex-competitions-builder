@@ -36,7 +36,7 @@ Agents: also read [AGENTS.md](AGENTS.md).
 
 ## Install the competition-builder skill
 
-Install the canonical skill for Codex, Cursor, Gemini CLI, or another Agent Skills host:
+Install the canonical skill for Codex, OpenCode, Cursor, Gemini CLI, or another Agent Skills host:
 
 ```bash
 npx skills add macrocosm-os/apex-competitions-builder \
@@ -47,8 +47,12 @@ Target one or more hosts explicitly when needed:
 
 ```bash
 npx skills add macrocosm-os/apex-competitions-builder -g -a codex
+npx skills add macrocosm-os/apex-competitions-builder \
+  --skill apex-competition-builder -g -a opencode -y
 npx skills add macrocosm-os/apex-competitions-builder -g -a codex -a gemini-cli
 ```
+
+OpenCode consumes the canonical Agent Skill directly; it does not need a separate plugin manifest.
 
 Codex and Grok can also install the repository as a native marketplace plugin:
 
