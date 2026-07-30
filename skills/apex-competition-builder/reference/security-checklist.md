@@ -13,6 +13,8 @@ The platform hides per-task result metadata and artifact files while a round is 
 - ❌ Never put secrets in immediately-visible error/failure reasons — miners see those during the active round. Error messages should say what was wrong with the submission, not what the evaluator was doing.
 - Remember the round input (your `input_schema` payload) is eventually miner-visible. If a field would hurt in a miner's hands, it doesn't belong in a task — keep audit material (baseline scoring evidence, generation wall-times, machine fingerprints) out of the `generate_round` task output entirely.
 - **Your player image and competition repo are public.** Anything baked into them — helper data, judge configuration, thresholds — is published on day one. Scoring assets belong in the referee image; secret behavioural checks belong in the Layer-2 screen image, which exists precisely so they stay private while the player image is public.
+- If the submission format is a prediction table, the artifact a miner sends has the **same shape as your answer key**. Never ship labels into the player sandbox, and never mount `private_data` there — it is referee-only by schema contract and by platform implementation, and the SDK loader rejects a `mount_path` that overlaps `submission.target_path`. If you find yourself wanting a private mount in the player, the design is wrong.
+- Never put per-row/per-instance losses in `metadata`. An aggregate score plus a failure-gate histogram is safe; a per-row correctness vector is a partial answer key.
 
 ## 2. Miners stealing from each other on shared infrastructure
 
@@ -33,6 +35,7 @@ The platform hides per-task result metadata and artifact files while a round is 
 
 - Sandboxes have no internet, ever. Egress is blocked by the platform regardless of what your spec says (`allow_internet` should stay false; `network_disabled: false` only makes the player reachable by the referee on the per-job network). Internet would enable exfiltration of your task data, download of oversized models (bypassing your resource limits), calls to external compute (a $0 sandbox proxying to a rented H100 cluster), and coordination between miners.
 - If the *evaluation* needs external resources (big datasets, LLM judges), bake them into the referee image or its data — pinned and content-hashed. The miner's artifact must be self-contained.
+- For data that must stay **secret**, `private_data` is the sanctioned route and is strictly better than baking it into an image: the platform fetches it with its own credentials, verifies the digest, and bind-mounts it read-only into the **referee only**. The secret never sits in a layer someone can `docker pull`, and it can be rotated without republishing an image. Your referee just reads a path — it must never try to fetch, and it must fail loudly if the mount is absent rather than score without ground truth.
 
 ## 5. Filesystem persistence across iterations
 
@@ -63,6 +66,14 @@ Not sandbox escapes — just beating your metric without solving your problem. Y
 - Add **cost regularizers** where "more force" trivially raises the metric: efficiency penalties like `score × exp(-intervention_magnitude / scale)` stop maximal-intervention solutions from dominating.
 - Probe your own metric adversarially before launch: spend a day trying to score high with solutions that are obviously wrong. Whatever you find, a miner finds within the first week — production competitions have had miners discover unintended strategies within days of launch.
 - Watch the recorded per-run resource metrics and score distributions after launch; step-function score jumps across many miners usually mean a leak or a metric hole, not a breakthrough.
+
+## 8b. Fixed-test-set (prediction / CSV) competitions
+
+A fixed dataset removes seed-fishing entirely — σ_round is exactly 0 and identical resubmissions score identically forever — but it introduces three threats the rotating-round shapes don't have.
+
+- **Label leakage from the public web.** If your test rows come from a dataset whose labels were ever published, the labels are obtainable and your competition measures lookup skill, not modelling skill. Note this is *not* fixed by keeping your copy private, by hiding or salting your split, by renumbering ids, or by switching to an ONNX artifact (a nearest-neighbour lookup table is a perfect model) — a join on the feature vector recovers the labels without touching your split at all. Only use data whose scored labels were never published. If you must use public data, launch at ~zero incentive weight and say so.
+- **Public-leaderboard overfitting.** Every scored submission is one bit of information about a test set that never rotates, so the pressure accumulates monotonically. Hold back a slice that is scored but never reported.
+- **Reveal leaks the answers.** See §1: for a `csv` artifact the submission *is* the answer key. A straight copy is harmless (it scores identically and cannot clear the 1% bar), but a **blend** of two revealed CSVs beats both with zero modelling work. Suppress artifact reveal for these competitions; reveal aggregate metrics only.
 
 ## 9. Determinism as a security property
 

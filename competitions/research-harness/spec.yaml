@@ -1,0 +1,98 @@
+schema: apex.competition.v1
+id: research_harness
+version: 0.1.0
+display_name: "Research Harness"
+kind: solo
+process_type: cpu
+
+# Both sandboxes are tiny: the miner submits a harness (pure logic), and the model is
+# served by the platform outside the sandboxes. Nothing here needs a GPU or a big heap.
+resources:
+  cpu_limit: 1
+  mem_limit: 512Mi
+  gpu_count: 0
+
+# NOTE: ref/digest are placeholders until the competition repo cuts its first signed
+# release. Real specs pin the digest of a cosign-signed image. `image` is the PLAYER
+# image (imports the miner's harness and serves it over gym_v1).
+image:
+  ref: ghcr.io/macrocosm-os/apex-competition-research-harness-player
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+# A harness is code. There is no model to convert and no weights to validate; the
+# artifact is a single module defining a `Harness` class (see player/launch.py).
+submission:
+  artifact_type: code
+  max_size_mb: 1
+  target_path: /app/submission.py
+
+# Layer-1 ASTGuard. The harness needs no I/O of any kind: its whole capability surface is
+# the action dicts it returns, which the referee interprets. So the defaults hold and we
+# only add tripwires for the modules a harness would reach for if it were trying to
+# escape the tool surface. The sandbox is the real boundary.
+screening:
+  max_size_mb: 1
+  extra_forbidden_modules: [socket, subprocess, urllib, http, requests, ctypes, multiprocessing]
+
+input_schema:
+  $ref: ./input.schema.json
+
+# The frozen base model. Served by the PLATFORM and reachable from the REFEREE ONLY —
+# the referee makes every call on the harness's behalf, so the meter cannot be gamed,
+# sampling is identical for every submission, and the call log is evidence rather than
+# an inference. See docs/authoring.md §2c.
+#
+# The served model is deliberately SMALL. A large one saturates the task — the reference
+# harness already reaches 0.76 here given unlimited tokens — and the competition is about
+# the scaffolding, so the model should be capable enough to read and weak enough that how
+# you use it matters. Changing the served model changes every score: re-tune `token_pool`
+# and re-measure `baseline_raw_score` if it moves (HANDOFF.md §5).
+base_model:
+  served_model: "google/gemma-3-4b-it"
+  max_tokens_per_episode: 28000
+  temperature: 0
+  max_output_tokens: 512
+
+defaults:
+  baseline_score: 0.0
+  # Measured against google/gemma-3-4b-it on a local OpenAI-compatible server with the
+  # published reference harness (baseline/submission.py): 0.3479 +/- 0.0239 (sd over 7
+  # master seeds, n=64, 28k token pool, 99% budget utilisation). The same harness scores
+  # 0.72-0.76 with an unlimited budget, so the shipped gap is mostly token efficiency —
+  # which is the point. See baseline/PROVENANCE.md.
+  baseline_raw_score: 0.3479
+  round_length_in_days: 2
+  # A harness IS the invention and copying source is free, unlike copying weights.
+  # 14 days is the longest reveal window in the repo, deliberately: see HANDOFF.md §6.
+  submission_reveal_days: 14
+  lower_is_better: false
+
+entrypoints:
+  # The PLAYER sandbox: imports the miner's harness and serves /health /reset /act. It
+  # holds no corpus, no weights, no scoring logic and no seed. allow_internet stays false
+  # — a player that could reach the model endpoint directly would bypass the referee's
+  # token meter, and the SDK rejects that combination at preflight.
+  evaluate:
+    command: ["python", "/app/launch.py", "--port", "8000"]
+    network_disabled: false   # the referee must reach the player on the per-job network
+    allow_internet: false
+    timeout_s: 3600
+    http_api:
+      port: 8000
+      readiness_path: /health
+      protocol: gym_v1
+
+# The scorer sandbox: world generator, BM25 index, the context-buffer tool surface, the
+# only connection to the base model, the meter, and the scoring rules. allow_internet is
+# true solely to reach the declared base_model endpoint.
+referee:
+  protocol: gym_v1
+  image:
+    ref: ghcr.io/macrocosm-os/apex-competition-research-harness-referee
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  timeout_s: 3600
+  allow_internet: true
+
+signature:
+  cosign_identity: https://github.com/macrocosm-os/apex-competition-research-harness/.github/workflows/release.yml
+  cosign_issuer: https://token.actions.githubusercontent.com

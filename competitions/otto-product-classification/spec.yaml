@@ -1,0 +1,99 @@
+schema: apex.competition.v1
+id: otto_product_classification
+version: 0.1.0
+display_name: "Otto Product Classification"
+kind: solo
+process_type: cpu
+
+# The player holds the parsed probability table (~8 MB for 18.5k rows) plus the stdlib SDK;
+# the referee holds the labels and one float per row. Measured peak RSS: <PLACEHOLDER> MB for
+# both sandboxes — right-sized rather than copied from another competition.
+resources:
+  cpu_limit: 1
+  mem_limit: 512Mi
+  gpu_count: 0
+
+# `image` is the PLAYER image (parses + serves the miner's submission.csv).
+# Built + keyless-cosign-signed by this repo's release workflow.
+image:
+  ref: ghcr.io/macrocosm-os/apex-competition-otto-product-classification-player
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # PLACEHOLDER
+
+# CSV artifact: the miner submits predictions, not code and not a model — the most constrained
+# artifact type there is. 18,559 rows x 9 probabilities is ~1.7 MB at 7 decimals; 8 MB is
+# generous headroom and still trivially small.
+submission:
+  artifact_type: csv
+  max_size_mb: 8
+  target_path: /app/submission.csv
+
+# Layer-1 generic CSV validator. This is a TRIPWIRE, not the boundary: referee/referee.py
+# re-checks every one of these itself, because the platform's csv screener may not exist yet
+# and the referee must never trust the CSV.
+screening:
+  max_size_mb: 8
+  required_columns: [id, Class_1, Class_2, Class_3, Class_4, Class_5, Class_6, Class_7, Class_8, Class_9]
+  id_column: id
+  expected_rows: 18559
+  value_min: 0.0
+  value_max: 1.0
+  row_sum: 1.0
+  row_sum_tol: 0.001
+  allow_nan: false
+
+# The ground truth. The platform fetches this object, sha256-verifies it, and bind-mounts it
+# READ-ONLY into the REFEREE ONLY. It is never in an image, never in git, and never reachable
+# from the player sandbox. env/labels.py re-verifies the digest and raises if the mount is
+# absent — the referee never fetches anything (sandboxes have no egress).
+private_data:
+  - uri: r2://apex-private/otto_product_classification/test_labels.csv
+    mount_path: /private/test_labels.csv
+    sha256: "87d85cf421180391e9f5224445bb23dd38ab0be000c35995d40e4ebe5c59912b"
+    read_only: true
+
+input_schema:
+  $ref: ./input.schema.json
+
+defaults:
+  baseline_score: 0.0
+  # MEASURED: log loss of baseline/submission.csv through tools/local_eval.py against the real
+  # Otto split (see HANDOFF.md §4 and baseline/PROVENANCE.md). With lower_is_better, takeover
+  # needs <= min(baseline, top) x 0.99, so this must be the real number — a too-LOW value here
+  # would make the competition unwinnable at launch.
+  baseline_raw_score: 0.473552
+  # With a fixed test set a round boundary is purely a leaderboard refresh: no seed rotates and
+  # no data changes. 2 days matches the platform norm without pretending otherwise.
+  round_length_in_days: 2
+  # 3650 == "effectively never". On a FIXED test set a winning CSV IS the answer key: a blend
+  # of two revealed CSVs beats both on log loss with zero modelling work. The schema requires a
+  # number >= 0 and has no "never", so this is the stopgap — see HANDOFF.md §5 Q6 and the
+  # platform ask for `reveal_artifact: false`.
+  submission_reveal_days: 3650
+  lower_is_better: true
+
+entrypoints:
+  # The PLAYER sandbox: parses submission.csv at startup (~0.2 s) and serves rows by id.
+  # timeout_s covers startup plus 5 /act calls; measured well under 5 s end to end.
+  evaluate:
+    command: ["python", "/app/launch.py", "--port", "8000"]
+    network_disabled: false # the referee must reach the player on the per-job network
+    allow_internet: false
+    timeout_s: 300
+    http_api:
+      port: 8000
+      readiness_path: /health
+      protocol: gym_v1
+
+# The scorer sandbox: the metric and the validity gates. No generate_round entrypoint and no
+# use of SEED — the test set is fixed and arrives via private_data, so there is nothing
+# per-round to generate and sigma_round is exactly 0.
+referee:
+  protocol: gym_v1
+  image:
+    ref: ghcr.io/macrocosm-os/apex-competition-otto-product-classification-referee
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # PLACEHOLDER
+  timeout_s: 300
+
+signature:
+  cosign_identity: https://github.com/macrocosm-os/apex-competition-otto-product-classification/.github/workflows/release.yml
+  cosign_issuer: https://token.actions.githubusercontent.com

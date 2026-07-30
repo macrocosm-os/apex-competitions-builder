@@ -1,0 +1,7 @@
+# otto_product_classification data manifest — the reproducibility contract.
+# Regenerate with `python tools/prepare_data.py`; verify with `--check`.
+# split identity: salt='otto_product_classification/v1' test_fraction=3/10
+11d3618a9d2dba32356c7c5f71ea2c790dcf1bd1ac1f0270f5f520b14329a3b4  upstream/train.csv  rows=61878  bytes=12433387
+36c92dc7392bed20e7082c84c51dbba8c76feebce0ab7c240af10e8b7fc7c314  data/train.csv  rows=43319  bytes=8704457
+d255627100c5f40fb521efb0709b4bebf59289f456d3e777bdcc2765c1341434  data/test_features.csv  rows=18559  bytes=3581196
+87d85cf421180391e9f5224445bb23dd38ab0be000c35995d40e4ebe5c59912b  private/test_labels.csv  rows=18559  bytes=256506

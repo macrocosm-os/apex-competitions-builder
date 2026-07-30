@@ -4,9 +4,11 @@ The argument-parsing / duel tests need no Docker. The end-to-end test builds the
 hello-world player image and runs it, so it is skipped when docker is unavailable.
 """
 
+import hashlib
 import shutil
 from pathlib import Path
 
+import pytest
 import yaml
 
 from apex_sdk.dev.cli import main
@@ -19,6 +21,11 @@ SUBMISSION = EXAMPLE / "player" / "submission.py"
 DOCKERFILE = EXAMPLE / "player" / "Dockerfile"
 
 _HAS_DOCKER = shutil.which("docker") is not None
+
+# A stand-in private ground-truth object: the bytes and the digest the spec must pin.
+_LABELS = b"id,target\n1,Class_1\n"
+_LABELS_SHA = hashlib.sha256(_LABELS).hexdigest()
+_MOUNT = "/private/test_labels.csv"
 
 
 def _minimal_duel() -> dict:
@@ -145,3 +152,152 @@ def test_solo_run_is_referee_driven_exits_3(capsys):
     )
     assert code == 3
     assert "referee" in (capsys.readouterr().err.lower())
+
+
+# --- csv artifact_type + private_data mounts -------------------------------------------
+
+
+def _minimal_csv_solo() -> dict:
+    """A solo spec whose ground truth arrives as a platform-mounted private object."""
+    spec = _minimal_duel()
+    del spec["duel"]
+    spec["kind"] = "solo"
+    spec["id"] = "csv_demo"
+    spec["submission"] = {"artifact_type": "csv", "max_size_mb": 5, "target_path": "/app/submission.csv"}
+    # csv artifact_type requires these three Layer-1 knobs, or _load fails for the wrong reason.
+    spec["screening"] = {"required_columns": ["id", "target"], "expected_rows": 1, "id_column": "id"}
+    spec["private_data"] = [
+        {"uri": "r2://apex-private/csv-demo/labels.csv", "mount_path": _MOUNT, "sha256": _LABELS_SHA}
+    ]
+    return spec
+
+
+def _csv_case(tmp_path: Path, *, labels: bytes | None = _LABELS) -> tuple[Path, Path, Path]:
+    """Write a csv spec, a round input, a submission, and (optionally) a local labels file."""
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(yaml.safe_dump(_minimal_csv_solo()))
+    input_path = tmp_path / "input.json"
+    input_path.write_text("{}")
+    sub_path = tmp_path / "submission.csv"
+    sub_path.write_text("id,target\n1,Class_1\n")
+    labels_path = tmp_path / "labels.csv"
+    if labels is not None:
+        labels_path.write_bytes(labels)
+    return spec_path, input_path, sub_path
+
+
+def _run_csv(tmp_path: Path, *extra: str, labels: bytes | None = _LABELS) -> int:
+    spec_path, input_path, sub_path = _csv_case(tmp_path, labels=labels)
+    return _run(
+        [
+            "run",
+            "--spec",
+            str(spec_path),
+            "--input",
+            str(input_path),
+            "--submission",
+            str(sub_path),
+            "--image",
+            "x:local",
+            *extra,
+        ]
+    )
+
+
+def test_run_parser_accepts_repeated_private_data():
+    from apex_sdk.dev.cli import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "run",
+            "--spec",
+            "s",
+            "--input",
+            "i",
+            "--private-data",
+            "/private/a.csv=/tmp/a.csv",
+            "--private-data",
+            "/private/b.csv=/tmp/b.csv",
+        ]
+    )
+    assert args.private_data == ["/private/a.csv=/tmp/a.csv", "/private/b.csv=/tmp/b.csv"]
+    # default must be [] (not None) or the resolver would crash on specs without the flag.
+    assert parser.parse_args(["run", "--spec", "s", "--input", "i"]).private_data == []
+
+
+@pytest.mark.parametrize("pair", ["/private/test_labels.csv", "relative=/tmp/f", "/private/x.csv="])
+def test_run_rejects_malformed_private_data_pair(pair, tmp_path):
+    assert _run_csv(tmp_path, "--private-data", pair) == 2
+
+
+def test_run_rejects_undeclared_private_data_mount(capsys):
+    # hello-world declares no private_data at all.
+    code = _run(
+        [
+            "run",
+            "--spec",
+            str(SPEC),
+            "--input",
+            str(INPUT),
+            "--submission",
+            str(SUBMISSION),
+            "--image",
+            "x:local",
+            "--private-data",
+            f"/private/x.csv={SUBMISSION}",
+        ]
+    )
+    assert code == 2
+    assert "not declared" in capsys.readouterr().err
+
+
+def test_run_requires_private_data_for_declared_mount(tmp_path, capsys):
+    assert _run_csv(tmp_path) == 2
+    assert _MOUNT in capsys.readouterr().err
+
+
+def test_run_private_data_missing_host_file(tmp_path):
+    assert _run_csv(tmp_path, "--private-data", f"{_MOUNT}=/nope/labels.csv") == 2
+
+
+def test_run_private_data_sha256_mismatch_fails(tmp_path, capsys):
+    code = _run_csv(tmp_path, "--private-data", f"{_MOUNT}={tmp_path / 'labels.csv'}", labels=b"id,target\n1,Class_9\n")
+    assert code == 2
+    assert "sha256 mismatch" in capsys.readouterr().err
+
+
+def test_run_private_data_happy_path_exits_3(tmp_path, capsys):
+    # Referee-driven execution is still unimplemented (exit 3), but the mount resolves and is
+    # reported in the plan — which is what makes the flag testable before the harness exists.
+    code = _run_csv(tmp_path, "--private-data", f"{_MOUNT}={tmp_path / 'labels.csv'}")
+    assert code == 3
+    out = capsys.readouterr().out
+    assert "private mount" in out
+    assert f"{_MOUNT} (referee only, ro)" in out
+
+
+def test_preflight_reports_private_data(tmp_path, capsys):
+    spec_path, _, _ = _csv_case(tmp_path)
+    assert _run(["preflight", "--spec", str(spec_path)]) == 0
+    assert "r2://apex-private/csv-demo/labels.csv" in capsys.readouterr().out
+
+
+def test_validate_game_result_enforces_the_gym_v1_contract():
+    from apex_sdk.dev.cli import _validate_game_result
+
+    ok = {"raw_scores": [0.5], "winner": 0, "terminal_reason": "scored", "steps": 10, "metadata": {}}
+    _validate_game_result(ok)
+
+    for mutation in (
+        {"raw_scores": []},  # empty
+        {"raw_scores": 0.5},  # not a list
+        {"raw_scores": [True]},  # bool is not a score
+        {"winner": "0"},
+        {"steps": 1.5},
+        {"terminal_reason": None},
+        {"metadata": []},
+    ):
+        with pytest.raises(SystemExit) as ei:
+            _validate_game_result({**ok, **mutation})
+        assert ei.value.code == 6

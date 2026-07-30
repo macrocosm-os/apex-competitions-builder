@@ -1,0 +1,93 @@
+# NOTE on `schema`: this targets the PROPOSED apex.competition.v2 (see
+# PLATFORM_PROPOSAL.md) -- the only diff from v1 is the two new fields below
+# (defaults.resolution_delay_days, entrypoints.resolve). `apex-dev preflight`
+# will reject this against the currently-published v1 schema until that
+# extension lands; everything else here already validates against v1.
+schema: apex.competition.v2
+id: energy_forecast
+version: 0.1.0
+display_name: "Energy Demand Forecast"
+kind: solo
+process_type: cpu
+
+resources:
+  cpu_limit: 1
+  mem_limit: 1.5Gi
+  gpu_count: 0
+
+# Built + keyless-cosign-signed by this repo's release workflow.
+# `image` is the PLAYER image (loads + serves the miner's ONNX forecaster).
+image:
+  ref: ghcr.io/macrocosm-os/apex-competition-energy-forecast-player
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000
+
+# ONNX artifact: the miner submits a forecasting model, not code. The player
+# image validates shapes ([1,1008] float32 in -> [1,24] float32 out) at load
+# time; there is no code to screen and no Layer-2 screen image needed.
+submission:
+  artifact_type: onnx
+  max_size_mb: 25
+  target_path: /app/submission.onnx
+
+screening:            # Layer-1 generic weights validator (onnx artifact_type)
+  max_size_mb: 25
+  min_weight_bytes: 10000        # rejects near-empty graphs / constant forecasters
+  max_code_weight_ratio: 0.1
+
+input_schema:
+  $ref: ./input.schema.json
+
+defaults:
+  baseline_score: 0.0
+  # Measured against the released baseline (baseline/baseline.onnx) in
+  # backtest mode across >=20 master seeds -- see HANDOFF.md Sec 4.
+  baseline_raw_score: 0.10
+  round_length_in_days: 1
+  submission_reveal_days: 5      # trained forecasters carry real R&D; protect them
+  lower_is_better: false
+  # PROPOSED (apex.competition.v2, see PLATFORM_PROPOSAL.md): days after round
+  # close before entrypoints.resolve runs and raw_scores become final. Sized
+  # to EIA-930's ~1-2 day actuals-finalization lag with margin.
+  resolution_delay_days: 2
+
+entrypoints:
+  # The PLAYER sandbox: serves the ONNX forecaster over gym_v1; the referee
+  # drives it once per instance. timeout_s covers the whole evaluation
+  # (up to 600 instances x single feed-forward pass, ~5ms each measured).
+  evaluate:
+    command: ["python", "/app/launch.py", "--port", "8000"]
+    network_disabled: false   # the referee must reach the player on the per-job network
+    allow_internet: false
+    timeout_s: 300
+    http_api:
+      port: 8000
+      readiness_path: /health
+      protocol: gym_v1
+  # PROPOSED (apex.competition.v2, see PLATFORM_PROPOSAL.md): runs once,
+  # resolution_delay_days after round close, once fetch_ground_truth.py has
+  # published the target period's real outcome. Shaped like generate_round
+  # (own image, own timeout) plus a ground-truth input the platform is
+  # responsible for handing it alongside the round's persisted locked
+  # predictions. Reads both, writes the FINAL result.json. See
+  # resolver/resolve.py for the reference implementation this assumes.
+  resolve:
+    image:
+      ref: ghcr.io/macrocosm-os/apex-competition-energy-forecast-resolver
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000
+    command: ["python", "/app/resolve.py"]
+    output_file: /data/result.json
+    timeout_s: 120
+
+# The scorer sandbox: pinned historical demand data, instance sampling from
+# the per-round SEED, scoring gates. No generate_round entrypoint: the
+# platform seed plus the referee's own pinned/live data is enough.
+referee:
+  protocol: gym_v1
+  image:
+    ref: ghcr.io/macrocosm-os/apex-competition-energy-forecast-referee
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000
+  timeout_s: 300
+
+signature:
+  cosign_identity: https://github.com/macrocosm-os/apex-competition-energy-forecast/.github/workflows/release.yml
+  cosign_issuer: https://token.actions.githubusercontent.com

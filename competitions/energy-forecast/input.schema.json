@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "energy_forecast round input",
+  "description": "Evaluation shape for one round. Instances themselves are drawn inside the referee from the platform's per-round SEED and the pinned/live demand data; the round input only carries the (miner-visible, non-secret) evaluation dimensions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["num_instances", "deadline_ms", "mode"],
+  "properties": {
+    "num_instances": {
+      "type": "integer",
+      "minimum": 6,
+      "maximum": 600,
+      "description": "Task instances per round (backtest mode only -- live mode always evaluates one instance per tracked Balancing Authority)."
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 50,
+      "maximum": 5000,
+      "description": "Per-/act deadline for the forecaster, enforced by the referee's HTTP client."
+    },
+    "mode": {
+      "enum": ["backtest", "live"],
+      "description": "backtest: instances sampled from already-known pinned history, scored immediately (used for local dev, baseline training, and sigma_round sizing). live: production mode -- instances are the freshest confirmed window per BA with a genuinely unknown target; requires the two-phase lock/resolve extension in PLATFORM_PROPOSAL.md."
+    }
+  }
+}

@@ -78,3 +78,31 @@ Decision guide:
 - **Internet?** No — egress is blocked by the platform regardless of your spec. If the evaluation genuinely needs external data (big datasets, LLM judges), bake it into the **referee image**, pinned and content-hashed. The player talks only to the referee over the per-job network; the miner's artifact must be self-contained.
 - **Dependencies in the player image**: pin exact versions, keep the list minimal. Every extra package is both attack surface and a hidden solution-space constraint you'll have to support forever.
 - Set memory/CPU so your **baseline uses ≤ 50%** — headroom is for better solutions, not for waste. Watch recorded per-run metrics (CPU seconds, peak memory, I/O) after launch to spot both abuse and over-provisioning.
+
+
+## Fixed test sets: paired SE, not sigma across seeds
+
+If your competition scores every submission on the *same* fixed instances (a Kaggle-style
+prediction competition), the sizing procedure above needs one substitution. There is no seed, so
+`sigma_round` is exactly 0 and measuring it tells you nothing — re-running gives bit-identical
+numbers, which is the good half of a fixed test set (seed-fishing becomes structurally
+impossible).
+
+The question becomes: does N instances resolve a genuine 1% quality difference? Two statistics,
+and only the second governs ranking:
+
+- **Unpaired SE of the mean**, bootstrapped over per-instance scores. This is the naive analogue
+  of `sigma_round`, and on a noisy per-instance metric (log loss, say) it will often fail the
+  `<= margin/4` bar with no achievable N. Report it honestly rather than tuning around it.
+- **Paired SE of the difference.** Because every submission is scored on exactly the same
+  instances, ranking is governed by `SE(mean(score_A - score_B))`. Per-instance scores of two
+  similar models correlate strongly, so this is much smaller — and with `sigma_round = 0`, the
+  same two submissions compared twice give identical numbers, so no decision is ever re-drawn.
+
+Report both, plus a separability check ("the weaker reference ranks worse in K/K bootstrap
+resamples") — the step-4 check adapted from "across 20 seeds", which is the only meaningful
+version when there is one seed. Worked example:
+`competitions/otto-product-classification/tools/measure_precision.py`.
+
+The resubmission-fishing defence also shifts: seed fixing is free, but the leaderboard itself
+becomes the leak, so lean on the submission fee and hold back a scored-but-unreported slice.

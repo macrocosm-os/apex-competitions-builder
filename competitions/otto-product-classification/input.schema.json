@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "otto_product_classification round input",
+  "description": "Evaluation shape for one round. The test set is FIXED and identical in every round (it is a private, sha256-pinned R2 object mounted into the referee), so nothing here selects data and nothing derives from the platform SEED. These are transport knobs only: neither can change the score of a valid submission. Deliberately excluded: clip_eps (part of the metric's definition — changing it is a spec version bump, not a round input), any scored-subset fraction (its only effect would be to ADD variance to a competition that currently has exactly zero, reopening seed-fishing for no benefit), row count / split parameters (the ground truth's identity, pinned by sha256).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batch_size", "deadline_ms"],
+  "properties": {
+    "batch_size": {
+      "type": "integer",
+      "minimum": 256,
+      "maximum": 65536,
+      "description": "Test ids per /act call. Batches are contiguous slices of the ascending test id order — no sampling, no shuffle, no seed. A batch_size at or above the test-set size degenerates to a single call."
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 250,
+      "maximum": 60000,
+      "description": "Per-/act deadline, enforced by the referee's HTTP client as deadline_ms/1000 + 1 s."
+    }
+  }
+}

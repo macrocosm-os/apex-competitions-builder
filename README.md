@@ -43,14 +43,29 @@ apex-dev run --spec examples/hello-world/spec.yaml \
              --dockerfile examples/hello-world/player/Dockerfile
 ```
 
-## The two competition shapes
+## The competition shapes
 
-- **solo** (`kind: solo`) — one player sandbox. The platform writes the submission to
-  `submission.target_path`, runs `entrypoints.evaluate.command`, and reads
-  `/data/result.json` = `{raw_score, eval_time_in_seconds, metadata}`.
-- **duel** (`kind: duel`) — N player sandboxes speaking the `gym_v1` HTTP API, plus a
-  competition-owned **referee** image that holds the game logic, drives the match, and
-  writes `/data/result.json` = `{raw_scores, winner, terminal_reason, steps, metadata}`.
+Both shapes are referee-driven and both write the same result: a solo eval is a 1-player duel.
+The miner submission never shares a sandbox with the scorer.
+
+- **solo** (`kind: solo`) — one player sandbox speaking `gym_v1`, plus the competition-owned
+  referee that scores it.
+- **duel** (`kind: duel`) — N player sandboxes, plus a referee that runs the match between them.
+
+Either way the referee writes `/data/result.json` =
+`{raw_scores, winner, terminal_reason, steps, metadata}` (see `apex_sdk.gym_v1.GameResult`).
+
+A common solo variant is the **fixed-dataset prediction** competition: the test features are
+public and constant, the miner submits a CSV of predictions (`submission.artifact_type: csv`),
+and the referee scores it against ground truth supplied via `private_data` — a private object
+the platform mounts read-only into the referee only. See
+`competitions/otto-product-classification/`.
+
+Another solo variant is the **harness** competition: the *model* is held fixed and the miner
+submits the scaffolding around it (`submission.artifact_type: code`). Declare the frozen
+model with `base_model` and the platform serves it, metered, reachable from the referee
+only — so the referee makes every call on the harness's behalf and the token budget cannot
+be gamed. See `docs/authoring.md` §2c and `competitions/research-harness/`.
 
 See `docs/authoring.md` for the full authoring flow and `src/apex_sdk/gym_v1/` for the
 protocol contracts (with docstrings).

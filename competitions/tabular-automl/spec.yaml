@@ -1,0 +1,81 @@
+schema: apex.competition.v1
+id: tabular_automl
+version: 0.1.0
+display_name: "Tabular AutoML"
+kind: solo
+process_type: cpu
+
+resources:
+  cpu_limit: 1
+  mem_limit: 1.5Gi
+  gpu_count: 0
+
+# `image` is the PLAYER image: loads the miner's submission.py and serves it over gym_v1.
+# NOTE: ref/digest are illustrative until this competition is built + signed. See HANDOFF.md.
+image:
+  ref: ghcr.io/macrocosm-os/apex-competition-tabular-automl-player
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+# The miner submits CODE, not a pre-trained model or predictions: `fit`/`predict`/`complexity`
+# functions the player calls every round against that round's freshly generated data (see
+# player/launch.py and README.md). No serialized model ever crosses the wire, so there is no
+# deserialization attack surface -- only the code-execution surface any `code` artifact_type
+# already has, bounded by the sandbox + the AST bans below.
+submission:
+  artifact_type: code
+  max_size_mb: 2
+  target_path: /app/submission.py
+
+screening:            # Layer-1 generic screener (code artifact_type -> ASTGuard)
+  max_size_mb: 2
+  # No serialization/deserialization at all: nothing needs pickle/dill/marshal/shelve, and
+  # those are exactly the modules that turn "submit a model" into remote code execution.
+  extra_forbidden_modules: [socket, subprocess, pickle, dill, marshal, shelve, ctypes]
+  extra_forbidden_calls: [eval, exec, __import__, compile]
+
+input_schema:
+  $ref: ./input.schema.json
+
+defaults:
+  baseline_score: 0.0
+  # The baseline (baseline/submission.py) IS the referee's reference model, so its raw_score
+  # is 1.0 by construction (reference_loss / reference_loss). A real submission must beat
+  # 1.0 x 1.01 to take the lead. See HANDOFF.md Sec 4 for the sizing evidence.
+  baseline_raw_score: 1.0
+  round_length_in_days: 1
+  submission_reveal_days: 1
+  lower_is_better: false
+
+entrypoints:
+  # The PLAYER sandbox: serves the submission's fit/predict/complexity over gym_v1. The
+  # referee runs `n_instances` independent reset()+act() cycles per round (fit timed against
+  # max_train_time_s, predict timed against inference_deadline_ms each) and averages raw_score
+  # across them -- see HANDOFF.md Sec 4 for why one draw per round is undersized. timeout_s
+  # must cover n_instances x (max_train_time_s + inference budget) plus overhead; sized here
+  # for the fixture defaults (20 x (5s + 2s) = 140s).
+  evaluate:
+    command: ["python", "/app/launch.py", "--port", "8000"]
+    network_disabled: false   # the referee must reach the player on the per-job network
+    allow_internet: false
+    timeout_s: 240
+    http_api:
+      port: 8000
+      readiness_path: /health
+      protocol: gym_v1
+  # No generate_round entrypoint: like every other competition in this repo, the referee
+  # derives the round's dataset deterministically from SEED alone (env/tasks.py) -- no
+  # separate round-generation image needed.
+
+# The scorer sandbox: generates the round's synthetic dataset from SEED (env/tasks.py), owns
+# the reference model + loss, applies the three hard gates (train time, inference time,
+# complexity), and normalizes raw_score. Ground truth (test_y) never leaves this image.
+referee:
+  protocol: gym_v1
+  image:
+    ref: ghcr.io/macrocosm-os/apex-competition-tabular-automl-referee
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  timeout_s: 240
+
+signature:
+  cosign_identity: https://github.com/macrocosm-os/apex-competition-tabular-automl/.github/workflows/release.yml
+  cosign_issuer: https://token.actions.githubusercontent.com

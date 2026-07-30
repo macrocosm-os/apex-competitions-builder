@@ -50,26 +50,8 @@
       "description": "Scheduling hint. gpu specs are gated by the platform GPU opt-in pool."
     },
     "resources": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cpu_limit", "mem_limit", "gpu_count"],
-      "properties": {
-        "cpu_limit": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "description": "Per-sandbox CPU cores. Must not exceed the per-env ceiling (stage 2, prod 4)."
-        },
-        "mem_limit": {
-          "type": "string",
-          "pattern": "^[0-9]+(\\.[0-9]+)?(Mi|Gi)$",
-          "description": "Per-sandbox memory as a k8s quantity (e.g. 1.5Gi, 512Mi). Floor 256Mi; ceiling stage 2Gi / prod 4Gi."
-        },
-        "gpu_count": {
-          "type": "integer",
-          "minimum": 0,
-          "description": "GPUs per sandbox. Must be 0 unless process_type is gpu and the env has a GPU pool."
-        }
-      }
+      "$ref": "#/$defs/resources",
+      "description": "The PLAYER sandbox's resources. See `referee.resources` for the (separate, optional) referee sandbox allocation."
     },
     "image": {
       "$ref": "#/$defs/pinned_image",
@@ -81,8 +63,8 @@
       "required": ["artifact_type", "max_size_mb", "target_path"],
       "properties": {
         "artifact_type": {
-          "enum": ["code", "torchscript", "onnx"],
-          "description": "How the platform writes the miner's submission. code=raw source bytes, torchscript=.pt bytes, onnx=.onnx bytes."
+          "enum": ["code", "torchscript", "onnx", "csv"],
+          "description": "How the platform writes the miner's submission. code=raw source bytes, torchscript=.pt bytes, onnx=.onnx bytes, csv=a UTF-8 CSV of predictions over a FIXED, public test-feature set (the most constrained artifact type: no code, no model, nothing to execute). A csv submission is scored by the referee against private ground truth, usually supplied via the top-level `private_data` block; the player sandbox only serves the rows."
         },
         "max_size_mb": {
           "type": "number",
@@ -106,9 +88,9 @@
     "screening": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Layer-1 screening config for the GENERIC platform screener (no competition code). Optional — sensible defaults apply. Keyed by submission.artifact_type: `code` uses the ASTGuard knobs, `torchscript`/`onnx` use the weights-validator knobs. Forbidden-lists are a tripwire, not the boundary (the sandbox is the actual defense), so it is fine that they are visible in the spec.",
+      "description": "Layer-1 screening config for the GENERIC platform screener (no competition code). Optional — sensible defaults apply. Keyed by submission.artifact_type: `code` uses the ASTGuard knobs, `torchscript`/`onnx` use the weights-validator knobs, `csv` uses the table-shape knobs (required_columns / expected_rows / id_column / value_min / value_max / row_sum / row_sum_tol / allow_nan). Forbidden-lists are a tripwire, not the boundary (the sandbox is the actual defense), so it is fine that they are visible in the spec.",
       "properties": {
-        "max_size_mb": { "type": "number", "exclusiveMinimum": 0, "description": "Reject submissions larger than this (code and model)." },
+        "max_size_mb": { "type": "number", "exclusiveMinimum": 0, "description": "Reject submissions larger than this (code, model, or csv)." },
         "extra_forbidden_modules": { "type": "array", "items": { "type": "string" }, "description": "code: modules banned on top of the base ASTGuard set." },
         "extra_forbidden_calls": { "type": "array", "items": { "type": "string" }, "description": "code: bare calls banned on top of the base set." },
         "extra_forbidden_attr_calls": { "type": "array", "items": { "type": "string" }, "description": "code: attribute calls (e.g. os.open) banned on top of the base set." },
@@ -117,7 +99,95 @@
         "extra_forbidden_attr_access": { "type": "array", "items": { "type": "string" }, "description": "code: attribute accesses (e.g. sys.modules) to block." },
         "block_dynamic_getattr": { "type": "boolean", "description": "code: reject dynamic getattr/setattr." },
         "min_weight_bytes": { "type": "integer", "minimum": 0, "description": "model: minimum total tensor-weight bytes (rejects zero-weight heuristics)." },
-        "max_code_weight_ratio": { "type": "number", "exclusiveMinimum": 0, "description": "model: max code:weight size ratio (rejects logic-in-code exploits)." }
+        "max_code_weight_ratio": { "type": "number", "exclusiveMinimum": 0, "description": "model: max code:weight size ratio (rejects logic-in-code exploits)." },
+        "required_columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "csv: column names that must all appear in the header (order-insensitive). A missing column is a typed rejection."
+        },
+        "expected_rows": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "csv: exact number of data rows required. The test-feature set is fixed, so this is a constant; any other count is a rejection."
+        },
+        "id_column": {
+          "type": "string",
+          "description": "csv: name of the row-id column. Must be present, unique, and cover the expected id set exactly — no missing, duplicate, or unknown ids."
+        },
+        "value_min": { "type": "number", "description": "csv: minimum allowed value for every non-id cell (e.g. 0 for probabilities)." },
+        "value_max": { "type": "number", "description": "csv: maximum allowed value for every non-id cell (e.g. 1 for probabilities)." },
+        "row_sum": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "csv: every data row's non-id cells must sum to this value within row_sum_tol (1.0 enforces a probability simplex)."
+        },
+        "row_sum_tol": { "type": "number", "minimum": 0, "default": 1e-6, "description": "csv: absolute tolerance for row_sum." },
+        "allow_nan": { "type": "boolean", "default": false, "description": "csv: reject NaN/Inf/empty cells unless true." }
+      }
+    },
+    "base_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["served_model", "max_tokens_per_episode"],
+      "description": "Optional. Declares a FROZEN base model the platform serves for this competition, for competitions where the miner submits a harness (scaffolding) rather than a model. The platform stands the model up outside the sandboxes and injects MODEL_BASE_URL, MODEL_NAME, MODEL_TEMPERATURE, MODEL_MAX_OUTPUT_TOKENS and MODEL_TOKEN_BUDGET into the REFEREE only. The referee is therefore the only party that can call the model, which is deliberate: (1) metering is tamper-proof because the party that counts the tokens is the party that spends them, and a miner cannot self-report usage; (2) sampling is pinned here rather than chosen per submission, so every harness faces an identical model and a round is reproducible from its seed; (3) the call log is evidence the scorer can put in metadata, so 'did this submission actually use the model' is observed rather than inferred; (4) inference capacity lives outside the per-sandbox CPU/memory ceilings, which no sandbox-hosted model could fit. A competition that declares base_model MUST set referee.allow_internet true (the referee has to reach the endpoint) and MUST leave entrypoints.evaluate.allow_internet false (a player that could reach the model directly would bypass the meter).",
+      "properties": {
+        "served_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Identifier of the model the platform serves (e.g. 'Qwen/Qwen3-8B'). The platform resolves this to a served endpoint; it is pinned for the life of the (id, version), so changing the model means a spec version bump."
+        },
+        "max_tokens_per_episode": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Hard ceiling on prompt+completion tokens one evaluation may spend, enforced by the platform and passed to the referee as MODEL_TOKEN_BUDGET. This is a cost control AND the competition's central scarcity: the referee may ration below it but never above it."
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "default": 0,
+          "description": "Sampling temperature, identical for every submission. Defaults to 0 because a competition whose scores move with sampling noise cannot rank harnesses."
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 512,
+          "description": "Per-call output ceiling. A harness may request fewer tokens than this, never more."
+        }
+      }
+    },
+    "private_data": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "description": "Private objects the PLATFORM fetches, verifies, and bind-mounts read-only into the REFEREE sandbox for every job. Use this for ground truth that must not be baked into a public image and must never be reachable by a miner: test labels, answer keys, held-out pools. The contract: (1) the platform resolves `uri` with its own credentials — the referee never sees them, and the object is never public; (2) the bytes are verified against `sha256` before the job starts, and a mismatch fails the job as a PLATFORM error, never as a submission failure; (3) the object is mounted at `mount_path` read-only in the REFEREE ONLY — never in a player sandbox, never writable; (4) the referee MUST NOT fetch anything itself — sandboxes have no egress, so an object that was not mounted is simply absent, and the referee should fail loudly rather than score without it. Objects are immutable per (id, version): changing the bytes means a new sha256 and a spec `version` bump. Optional — omit the block entirely when all scoring data is baked into the referee image.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["uri", "mount_path", "sha256"],
+        "properties": {
+          "uri": {
+            "type": "string",
+            "pattern": "^r2://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/.+$",
+            "description": "Location in Macrocosmos-controlled object storage as r2://<bucket>/<key>. Only the `r2` scheme is supported; the platform holds the credentials and uploads the object at onboarding."
+          },
+          "mount_path": {
+            "type": "string",
+            "pattern": "^/.*[^/]$",
+            "description": "Absolute path inside the REFEREE sandbox where the platform mounts the object (a file path, no trailing slash). Must not collide with submission.target_path or a platform-reserved path such as /data — enforced by the SDK loader and the syncer."
+          },
+          "sha256": {
+            "$ref": "#/$defs/sha256_hex",
+            "description": "Digest of the object's bytes, verified by the platform before every job. This is what pins the ground truth to the spec version."
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "description": "Always true. Private data is never mounted writable; the key exists only so the spec states it explicitly. Setting false is a validation error."
+          }
+        }
       }
     },
     "defaults": {
@@ -228,7 +298,16 @@
           "$ref": "#/$defs/pinned_image",
           "description": "The referee/scorer image. Pinned by digest; mirrored + cosign-verified at sync time like the player image."
         },
-        "timeout_s": { "$ref": "#/$defs/timeout_s" }
+        "timeout_s": { "$ref": "#/$defs/timeout_s" },
+        "allow_internet": {
+          "type": "boolean",
+          "default": false,
+          "description": "Default false: the referee has no egress, like every other sandbox. Set true ONLY to reach a platform-provided service the spec declares — today that means a `base_model` endpoint. It does not grant the open internet: the platform allows the declared endpoint and nothing else. Players are never granted this, so the referee stays the sole metered path to the model."
+        },
+        "resources": {
+          "$ref": "#/$defs/resources",
+          "description": "Optional. The referee sandbox's OWN resource allocation, independent of the top-level `resources` (which sizes the player). Omit when the referee only needs to score, not compute — every competition before this one left it unset and got the platform's default referee sizing. Declare it when the referee itself does real work (e.g. running a training pass, not just judging one): same shape and same per-env ceilings as the player's `resources`, validated separately so a heavy referee never has to inflate the player's declared footprint to match, and vice versa."
+        }
       }
     },
     "duel": {
@@ -264,9 +343,48 @@
     {
       "if": { "properties": { "kind": { "const": "solo" } } },
       "then": { "not": { "required": ["duel"] } }
+    },
+    {
+      "if": {
+        "required": ["submission"],
+        "properties": {
+          "submission": {
+            "required": ["artifact_type"],
+            "properties": { "artifact_type": { "const": "csv" } }
+          }
+        }
+      },
+      "then": {
+        "required": ["screening"],
+        "properties": {
+          "screening": { "required": ["required_columns", "expected_rows", "id_column"] }
+        }
+      }
     }
   ],
   "$defs": {
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu_limit", "mem_limit", "gpu_count"],
+      "properties": {
+        "cpu_limit": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Per-sandbox CPU cores. Must not exceed the per-env ceiling (stage 2, prod 4)."
+        },
+        "mem_limit": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Mi|Gi)$",
+          "description": "Per-sandbox memory as a k8s quantity (e.g. 1.5Gi, 512Mi). Floor 256Mi; ceiling stage 2Gi / prod 4Gi."
+        },
+        "gpu_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "GPUs per sandbox. Must be 0 unless process_type is gpu and the env has a GPU pool."
+        }
+      }
+    },
     "command": {
       "type": "array",
       "minItems": 1,
@@ -277,6 +395,11 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 7200
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Lowercase-hex sha256 of an object's bytes — the same digest style as pinned_image.digest, without the 'sha256:' prefix."
     },
     "pinned_image": {
       "type": "object",

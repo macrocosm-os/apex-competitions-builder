@@ -1,0 +1,4 @@
+{
+  "batch_size": 4096,
+  "deadline_ms": 5000
+}

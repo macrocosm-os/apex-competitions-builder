@@ -1,0 +1,87 @@
+schema: apex.competition.v1
+id: algo_speedrun
+version: 0.1.0
+display_name: "Algorithmic Speedrun"
+kind: solo
+process_type: gpu
+
+# The PLAYER never trains anything and never needs a GPU: it holds the miner's screened
+# override file(s) and serves them to the referee over one gym_v1 /act call. All training
+# compute lives in the REFEREE's own `resources` block below -- see HANDOFF.md §2 for why
+# this inverts the usual GPU-in-player assumption.
+resources:
+  cpu_limit: 1
+  mem_limit: 512Mi
+  gpu_count: 0
+
+image:
+  ref: ghcr.io/macrocosm-os/apex-competition-algo-speedrun-player
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+# A single Python module. Miners override the nanochat training-loop critical path
+# (model architecture + optimizer, LR/momentum/weight-decay schedule, data packing) via
+# three functions plus an EXTRA_FILES escape valve for genuinely new modules -- see
+# README.md for the contract. This stays inside artifact_type: code (no new schema
+# needed) at the cost of virtual files living inside one file; HANDOFF.md §3 explains why.
+submission:
+  artifact_type: code
+  max_size_mb: 2
+  target_path: /app/submission.py
+
+# Layer-1 ASTGuard on the outer submission.py. NOTE: this does NOT reach into the string
+# contents of EXTRA_FILES -- those are re-screened by the referee itself with an
+# equivalent AST pass (referee/screen.py) before being materialized and imported, because
+# the platform's generic screener only ever looks at target_path's literal bytes.
+screening:
+  max_size_mb: 2
+  extra_forbidden_modules: [socket, subprocess, urllib, http, requests, ctypes, multiprocessing]
+
+input_schema:
+  $ref: ./input.schema.json
+
+defaults:
+  # Proxy metric: validation bits-per-byte after a fixed, short training run (see
+  # input.schema.json). Lower is better -- this is a loss, not an accuracy.
+  baseline_score: 0.0
+  # Measured against baseline/submission.py (EXTRA_FILES = {}, i.e. zero training-loop
+  # changes) with a REAL rustbpe tokenizer trained on real ClimbMix-400B shard data and a
+  # real held-out validation shard (not a mock/stub): mean 2.5773, stdev 0.0606 over 5
+  # seeds (0-4), default fixtures/input.json config (depth=4, num_iterations=20). See
+  # baseline/PROVENANCE.md for the exact reproduction and full per-seed numbers.
+  baseline_raw_score: 2.5773
+  round_length_in_days: 1
+  submission_reveal_days: 14
+  lower_is_better: true
+
+entrypoints:
+  evaluate:
+    command: ["python", "/app/launch.py", "--port", "8000"]
+    network_disabled: false
+    allow_internet: false
+    timeout_s: 120
+    http_api:
+      port: 8000
+      readiness_path: /health
+      protocol: gym_v1
+
+# The referee owns the vendored nanochat checkout, applies the miner's overrides, and
+# runs the actual (short, proxy-scale) training pass -- this is where GPU-hours are
+# actually spent (HANDOFF.md §2). 1 GPU / 8 CPU / 32Gi is sized for the cheap PROXY pass
+# only (depth<=8, num_iterations<=200, see input.schema.json) -- the periodic full-scale
+# deep eval runs out-of-band on separate, larger infra (tools/run_deep_eval.py), not
+# through this sandbox.
+referee:
+  protocol: gym_v1
+  image:
+    ref: ghcr.io/macrocosm-os/apex-competition-algo-speedrun-referee
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  timeout_s: 1800
+  allow_internet: false
+  resources:
+    cpu_limit: 4
+    mem_limit: 1Gi
+    gpu_count: 1
+
+signature:
+  cosign_identity: https://github.com/macrocosm-os/apex-competition-algo-speedrun/.github/workflows/release.yml
+  cosign_issuer: https://token.actions.githubusercontent.com

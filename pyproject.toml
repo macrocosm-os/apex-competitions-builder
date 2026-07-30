@@ -1,6 +1,6 @@
 [project]
 name = "apex-competition-sdk"
-version = "0.3.0"
+version = "0.4.0"
 description = "Contracts and tooling for building Apex competitions (spec schema, gym_v1 protocol, apex-dev harness)."
 authors = [{ name = "Macrocosmos.ai" }]
 readme = "README.md"
@@ -34,3 +34,10 @@ line-length = 120
 
 [tool.ruff]
 line-length = 120
+
+[tool.pytest.ini_options]
+# Bare `pytest` runs the SDK suite only. Each competition ships its own `env` package by
+# convention (competitions are separate repos in real life; they only share this monorepo
+# for reference), so collecting two of them into one pytest process makes `import env`
+# ambiguous. CI runs each competition's suite in its own process — see ci.yml.
+testpaths = ["tests"]

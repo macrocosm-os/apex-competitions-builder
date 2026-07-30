@@ -36,3 +36,12 @@ COPY evaluate.py /app/evaluate.py
 # The platform writes the miner's submission to spec.submission.target_path
 # (e.g. /app/submission.py) and runs spec.entrypoints.evaluate.command.
 ```
+
+## Extra read-only mounts in the referee
+
+A referee container may receive additional read-only bind mounts declared in the spec's
+`private_data` block (e.g. `/private/test_labels.csv`) — private ground truth the platform
+fetches, sha256-verifies, and mounts per job. The base image needs no `mkdir` for these; the
+mount point is created for you. Referee code must treat those paths as read-only, must not
+assume they exist without checking, and must never attempt to fetch them itself (sandboxes have
+no egress). Player containers never receive these mounts.

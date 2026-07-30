@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "algo_speedrun round input",
+  "description": "Per-round proxy-eval sizing. This is the CHEAP pass that scores every round (spec defaults.*); the periodic full-scale deep eval over the top-K submissions runs out-of-band (tools/run_deep_eval.py, see HANDOFF.md §6) and is not configured here.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "depth": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 8,
+      "default": 4,
+      "description": "Transformer depth for the proxy model. Small on purpose: this measures the training-loop change, not scale. model_dim = depth * aspect_ratio (fixed at 64)."
+    },
+    "max_seq_len": {
+      "type": "integer",
+      "minimum": 128,
+      "maximum": 1024,
+      "default": 512
+    },
+    "device_batch_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "default": 1
+    },
+    "total_batch_size": {
+      "type": "integer",
+      "minimum": 512,
+      "maximum": 65536,
+      "default": 512,
+      "description": "Total tokens per optimizer step. Must be a multiple of device_batch_size * max_seq_len."
+    },
+    "num_iterations": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 200,
+      "default": 20,
+      "description": "Fixed step budget for the proxy pass -- deliberately tiny (nanochat's own documented CPU/Macbook smoke-test scale, see referee/train_runner.py)."
+    },
+    "eval_tokens": {
+      "type": "integer",
+      "minimum": 512,
+      "maximum": 65536,
+      "default": 4096,
+      "description": "Tokens used to compute the final validation bpb (the scored metric)."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Overridden by the platform's per-round SEED; present for local dev only (tools/local_eval.py)."
+    }
+  }
+}

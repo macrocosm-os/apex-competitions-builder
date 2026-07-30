@@ -20,6 +20,18 @@ import urllib.request
 from typing import Any
 
 
+def _safe_json(raw: bytes) -> dict[str, Any]:
+    """Parse a player response body without ever raising: a malformed body is the player's
+    problem, and the referee needs a value it can attribute rather than a JSONDecodeError."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"error": raw[:200].decode("utf-8", "replace")}
+    return parsed if isinstance(parsed, dict) else {"action": parsed}
+
+
 class PlayerError(RuntimeError):
     """A player was unreachable, errored, or timed out.
 
@@ -45,12 +57,19 @@ class PlayerClient:
             with urllib.request.urlopen(req, timeout=timeout_s) as resp:
                 status = resp.status
                 raw = resp.read()
-        except urllib.error.URLError as e:
-            raise PlayerError(f"POST {path} to {self.base_url} failed: {e}") from e
+        except urllib.error.HTTPError as e:
+            # A 4xx/5xx IS a response: read it so the referee can report the player's own
+            # error text (a player that raises now returns 500 with a message).
+            return e.code, _safe_json(e.read())
         except TimeoutError as e:
             raise PlayerError(f"POST {path} to {self.base_url} timed out after {timeout_s}s") from e
-        payload = json.loads(raw) if raw else {}
-        return status, payload
+        except OSError as e:
+            # URLError is an OSError, and so is ConnectionResetError /
+            # http.client.RemoteDisconnected — a player that died mid-request. Every transport
+            # failure must become a PlayerError so the referee can attribute it to the
+            # submission instead of crashing and being blamed itself.
+            raise PlayerError(f"POST {path} to {self.base_url} failed: {e}") from e
+        return status, _safe_json(raw)
 
     def health(self) -> bool:
         """Return True if the player reports ready. Never raises (returns False on error)."""

@@ -1,0 +1,8 @@
+{
+  "num_questions": 64,
+  "token_pool": 28000,
+  "max_steps_per_question": 40,
+  "max_context_tokens": 3000,
+  "trap_rate": 0.7,
+  "deadline_ms": 15000
+}

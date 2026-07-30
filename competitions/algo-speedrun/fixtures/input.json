@@ -1,0 +1,8 @@
+{
+  "depth": 4,
+  "max_seq_len": 512,
+  "device_batch_size": 1,
+  "total_batch_size": 512,
+  "num_iterations": 20,
+  "eval_tokens": 4096
+}

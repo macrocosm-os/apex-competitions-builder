@@ -71,20 +71,31 @@ def _make_handler(player: Player, readiness_path: str):
                 self._send_json(400, {"error": "invalid json"})
                 return
 
-            if self.path == "/reset":
-                player.reset(
-                    match_id=body["match_id"],
-                    player_index=body["player_index"],
-                    seed=body["seed"],
-                    config=body.get("config", {}),
-                )
-                self.send_response(204)
-                self.end_headers()
-            elif self.path == "/act":
-                action = player.act(observation=body.get("observation"), deadline_ms=body["deadline_ms"])
-                self._send_json(200, {"action": action})
-            else:
-                self._send_json(404, {"error": "not found"})
+            # A player that raises is a SUBMISSION failure, and it must reach the referee as an
+            # HTTP status it can attribute. Without this, the exception escapes the handler,
+            # BaseHTTPRequestHandler drops the connection, and the referee sees a raw
+            # http.client.RemoteDisconnected instead of a PlayerError — which crashes the
+            # referee and makes the platform blame the REFEREE for a bad submission.
+            try:
+                if self.path == "/reset":
+                    player.reset(
+                        match_id=body["match_id"],
+                        player_index=body["player_index"],
+                        seed=body["seed"],
+                        config=body.get("config", {}),
+                    )
+                    self.send_response(204)
+                    self.end_headers()
+                elif self.path == "/act":
+                    action = player.act(observation=body.get("observation"), deadline_ms=body["deadline_ms"])
+                    self._send_json(200, {"action": action})
+                else:
+                    self._send_json(404, {"error": "not found"})
+            except KeyError as e:
+                # A malformed request from the referee, not the player's fault.
+                self._send_json(400, {"error": f"missing field {e}"})
+            except Exception as e:
+                self._send_json(500, {"error": f"{type(e).__name__}: {e}"})
 
     return Handler
 

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "research_harness round input",
+  "description": "Per-round evaluation knobs, delivered to the referee as CONFIG_JSON. Every one of these may only make the round EASIER or SMALLER than the spec/referee defaults; the token pool is additionally clamped to the platform's MODEL_TOKEN_BUDGET. The corpus and questions themselves are not configurable: they derive entirely from the platform's per-round SEED, which never reaches a player sandbox.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "num_questions": {
+      "type": "integer",
+      "minimum": 7,
+      "maximum": 256,
+      "default": 64,
+      "description": "Questions in the round. The seven templates are cycled, so a multiple of 7 keeps the difficulty mix balanced. Round-to-round sd is ~0.029 at 64 (HANDOFF.md §4)."
+    },
+    "token_pool": {
+      "type": "integer",
+      "minimum": 1000,
+      "default": 28000,
+      "description": "Prompt+completion tokens the whole episode may spend, shared across every question. This is the competition's central scarcity: allocating it across questions is the skill being measured. Clamped to MODEL_TOKEN_BUDGET."
+    },
+    "max_steps_per_question": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 200,
+      "default": 40,
+      "description": "Action cap per question, so a harness cannot stall the round."
+    },
+    "max_context_tokens": {
+      "type": "integer",
+      "minimum": 200,
+      "maximum": 32000,
+      "default": 3000,
+      "description": "Ceiling on the referee-side context buffer, so 'add every document' is not a strategy."
+    },
+    "trap_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7,
+      "description": "Probability that a question gets an adversarial document planted on one hop of its chain (contradictor | stale | injection | ambiguous, chosen uniformly)."
+    },
+    "deadline_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 60000,
+      "default": 15000,
+      "description": "Per-action wall clock the player must respond within. Model latency is the referee's problem, not the harness's, so this only needs to cover the harness's own decision."
+    }
+  }
+}

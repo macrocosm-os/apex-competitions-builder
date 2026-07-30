@@ -66,11 +66,15 @@ The goal statement is a required section of `HANDOFF.md` and drives everything d
 
 ### 2. Pick the most constrained submission format that can express a winning solution
 
-`submission.artifact_type` supports `onnx`, `torchscript`, and `code`. In order of preference:
+`submission.artifact_type` supports `csv`, `onnx`, `torchscript`, and `code`. In order of preference:
 
-1. **`onnx`** — a pure model artifact with a closed grammar. The miner sends no executable code: your player image loads the graph, validates shapes/opsets with typed errors, and serves it. Nothing to screen.
-2. **`torchscript`** — still an artifact, but a TorchScript archive contains Python code by design, so it needs structural screening (the generic Layer-1 weights validator: size, magic bytes, code-to-weights ratio). Use it when ONNX can't express the model.
-3. **`code`** — the miner's source runs inside the player sandbox. Attack surface is bounded by the sandbox (no egress, resource caps, timeouts) plus Layer-1 AST screening, but you now own the problem of miner code probing your protocol instead of solving your task.
+1. **`csv`** — a table of predictions over a fixed, public test set. No code, no model, nothing to execute; Layer-1 validates header, row count, id coverage, and value ranges declaratively, and there is no attack surface inside the artifact at all. Use it whenever the task is prediction on a dataset that does not change.
+
+   The trade-off `csv` brings that the others don't: **the submission *is* the answers.** Which means (a) the labels must stay private — that's what `private_data` is for; (b) fixing all randomness per round (step 5) is free, but public-leaderboard overfitting replaces seed-fishing as the failure mode; (c) revealing a top submission after `submission_reveal_days` **publishes a near-copy of the answer key**, and a blend of two revealed CSVs beats both with zero modelling work. Suppress reveal for csv competitions.
+
+2. **`onnx`** — a pure model artifact with a closed grammar. The miner sends no executable code: your player image loads the graph, validates shapes/opsets with typed errors, and serves it. Nothing to screen.
+3. **`torchscript`** — still an artifact, but a TorchScript archive contains Python code by design, so it needs structural screening (the generic Layer-1 weights validator: size, magic bytes, code-to-weights ratio). Use it when ONNX can't express the model.
+4. **`code`** — the miner's source runs inside the player sandbox. Attack surface is bounded by the sandbox (no egress, resource caps, timeouts) plus Layer-1 AST screening, but you now own the problem of miner code probing your protocol instead of solving your task.
 
 Rule of thumb: if you're tempted to screen submissions for "dangerous code," first ask whether the competition can be reformulated so the submission isn't code at all. A model-artifact competition with a hard-coded architecture is strictly more robust than a "submit any code" competition with screening bolted on — and it pushes miners toward better solutions of the actual problem instead of engineering around your checks. We steer, not enforce: if code is truly required, use it, but treat that as a cost you justified, not a default.
 
@@ -132,7 +136,7 @@ Full contracts with docstrings live in the SDK (`src/apex_sdk/gym_v1/`, `docs/au
 
 **Screening** — two layers, neither is partner Python in the platform:
 
-- *Layer 1 (declarative)*: the `screening` block in your spec configures the platform's generic screener — AST bans for `code` (`extra_forbidden_modules`, `extra_forbidden_calls`, …) or the weights validator for `torchscript`/`onnx`, plus `max_size_mb`. It's a tripwire, not the boundary — the sandbox is the actual defense, so it's fine that it's visible in the spec.
+- *Layer 1 (declarative)*: the `screening` block in your spec configures the platform's generic screener — AST bans for `code` (`extra_forbidden_modules`, `extra_forbidden_calls`, …) the weights validator for `torchscript`/`onnx`, or the table-shape knobs for `csv` (`required_columns`, `expected_rows`, `id_column`, `value_min`/`value_max`, `row_sum`/`row_sum_tol`, `allow_nan`), plus `max_size_mb`. It's a tripwire, not the boundary — the sandbox is the actual defense, so it's fine that it's visible in the spec.
 - *Layer 2 (optional, bespoke)*: `entrypoints.screen` runs your checks in a separate private image before evaluation; exit 0 = pass. Use it only for behavioural checks that must stay secret.
 
 ## Test locally, then ship
@@ -152,6 +156,8 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] One-sentence task definition: what the miner receives, what they return, what scalar scores it.
 - [ ] Kind chosen: `solo` by default; `duel` only with a written case that quality is inherently relative (plus fair-match, tiebreak, and forfeit design).
 - [ ] Submission format chosen from the constrained-format ladder above; Layer-2 screening need justified or eliminated.
+- [ ] If scoring needs private data: object handed to Macrocosmos for R2 upload, and its `sha256` pinned in `private_data`. The referee reads the mount, verifies the digest, and **fails loudly if it is absent** — it never fetches.
+- [ ] If `artifact_type: csv`: Layer-1 knobs set (`required_columns`, `expected_rows`, `id_column`, value/simplex bounds), verified to reject a malformed CSV, and re-checked independently in the referee.
 - [ ] Metric + baselines (`defaults.baseline_raw_score`) + anti-Goodhart gates defined.
 - [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds).
 - [ ] Security checklist passed (`reference/security-checklist.md`).

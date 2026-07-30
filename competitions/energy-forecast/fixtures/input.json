@@ -1,0 +1,5 @@
+{
+  "num_instances": 180,
+  "deadline_ms": 2000,
+  "mode": "backtest"
+}

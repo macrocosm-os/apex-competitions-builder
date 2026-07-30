@@ -1,0 +1,14 @@
+# Derived Kaggle data: regenerate with `python tools/prepare_data.py`. Not committed because
+# Otto is a Kaggle *competition* dataset governed by competition rules, not an open licence —
+# republishing it (or a slice of it) in a public repo would very likely violate the T&Cs, which
+# is exactly why Kaggle requires per-user rules acceptance. data/MANIFEST.sha256 IS committed
+# and is the reproducibility contract.
+data/*.csv
+data/*.zip
+
+# The private ground truth. Handed to Macrocosmos for upload to R2; never committed, never
+# baked into an image. Its sha256 is pinned in spec.yaml and env/labels.py.
+private/
+
+# Generated submissions from tools/make_test_submission.py
+build/

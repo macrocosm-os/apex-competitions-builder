@@ -7,24 +7,24 @@ Commands:
         No Docker required. This is the gate designers run before opening a registry PR.
 
     apex-dev run --spec ./spec.yaml --input fixtures/input.json --submission <path>
-                 (--dockerfile <path> [--context <dir>] | --image <local-tag>) [--env stage]
-        Execute a SOLO spec's eval locally in Docker, mirroring the platform's SoloRunner:
-        write the submission to submission.target_path and the round input to
-        /data/input.json, run entrypoints.evaluate.command under the spec's resource limits
-        and network policy, then read + validate /data/result.json. Either build the player
-        image locally from --dockerfile or reuse a prebuilt local --image. Duel execution is
-        not implemented yet (prints the plan and exits 3).
+                 (--dockerfile <path> [--context <dir>] | --image <local-tag>)
+                 [--private-data MOUNT_PATH=HOST_PATH ...] [--env stage]
+        Validate the full execution contract for a spec and print the plan the platform
+        would follow: the player sandbox, the referee sandbox, the submission path, and any
+        private_data mounts. Every competition is referee-driven (a solo eval is a 1-player
+        duel), and the local two-sandbox harness is a follow-up, so this currently exits 3
+        after validating. For specs that declare `private_data`, pass one --private-data per
+        entry; apex-dev verifies the same sha256 the platform verifies before every job.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
 import sys
-import tempfile
-import uuid
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -68,6 +68,15 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     print(f"✓ spec valid: {spec.id} v{spec.version} (kind={spec.kind}, env={args.env})")
     if args.input:
         _validate_input(spec, args.input)
+    if spec.base_model:
+        bm = spec.base_model
+        print(
+            f"• base_model: {bm['served_model']} (platform-served, referee-only) "
+            f"budget={bm['max_tokens_per_episode']} tokens/episode "
+            f"temperature={bm.get('temperature', 0)}"
+        )
+    for pd in spec.private_data:
+        print(f"• private_data: {pd['uri']} -> {pd['mount_path']} (platform-mounted, ro, referee only)")
     print("✓ preflight passed")
 
 
@@ -76,6 +85,11 @@ def _die(msg: str, code: int = 1) -> "SystemExit":
     return SystemExit(code)
 
 
+# _require_docker / _mem_limit_to_docker / _build_image / _docker / _validate_game_result are
+# the building blocks of the referee-driven local harness (player + referee sandboxes on a
+# shared network), which `apex-dev run` does not implement yet. They are kept, not deleted, so
+# that work has a correct foundation — in particular _validate_game_result encodes the real
+# gym_v1 result contract, which the code it replaced did not.
 def _require_docker() -> None:
     if shutil.which("docker") is None:
         raise _die("docker CLI not found on PATH; apex-dev run needs Docker.", 4)
@@ -125,94 +139,78 @@ def _docker(args: list[str], timeout: int | None = None) -> tuple[int, str]:
     return proc.returncode, proc.stdout or ""
 
 
-def _run_solo(spec: LoadedSpec, args: argparse.Namespace) -> None:
-    if not args.submission:
-        raise _die("--submission is required for a solo run (the miner artifact to evaluate).", 2)
-    submission_src = Path(args.submission)
-    if not submission_src.is_file():
-        raise _die(f"--submission not found: {submission_src}", 2)
+def _validate_game_result(result: object) -> None:
+    """Validate a referee's /data/result.json against the gym_v1 GameResult contract.
 
-    has_dockerfile = bool(args.dockerfile)
-    has_image = bool(args.image)
-    if has_dockerfile == has_image:
-        raise _die("provide exactly one of --dockerfile or --image.", 2)
-
-    _require_docker()
-    image = _build_image(args.dockerfile, args.context, spec) if has_dockerfile else args.image
-
-    s = spec.raw
-    ep = s["entrypoints"]["evaluate"]
-    command = ep["command"]
-    timeout_s = int(ep["timeout_s"])
-    network_disabled = ep.get("network_disabled", True)
-    target_path = s["submission"]["target_path"]
-    res = s["resources"]
-
-    with tempfile.TemporaryDirectory(prefix="apex-dev-run-") as tmp:
-        tmpdir = Path(tmp)
-        data_dir = tmpdir / "data"
-        data_dir.mkdir()
-        # The image runs as a non-root user (uid 1000, like the platform sandbox); make the
-        # bind-mounted /data writable so it can write result.json on Linux hosts too.
-        data_dir.chmod(0o777)
-        (data_dir / "input.json").write_bytes(Path(args.input).read_bytes())
-        submission_host = tmpdir / "submission_artifact"
-        submission_host.write_bytes(submission_src.read_bytes())
-        result_path = data_dir / "result.json"
-
-        name = f"apex-dev-{spec.id}-{uuid.uuid4().hex[:8]}"
-        run_args = [
-            "run",
-            "--rm",
-            "--name",
-            name,
-            "--memory",
-            _mem_limit_to_docker(res["mem_limit"]),
-            "--cpus",
-            str(res["cpu_limit"]),
-            "-v",
-            f"{data_dir}:/data",
-            "-v",
-            f"{submission_host}:{target_path}:ro",
-        ]
-        if network_disabled:
-            run_args += ["--network", "none"]
-        run_args += [image, *command]
-
-        print(f"• running eval: image={image} network={'none' if network_disabled else 'default'} timeout={timeout_s}s")
-        print(f"  submission -> {target_path}, input -> /data/input.json")
-        try:
-            rc, _ = _docker(run_args, timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            subprocess.run(["docker", "kill", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            raise _die(f"eval exceeded timeout_s={timeout_s}; container killed.", 5)
-
-        if rc != 0:
-            raise _die(f"eval container exited non-zero (exit {rc}).", rc or 1)
-
-        if not result_path.is_file():
-            raise _die("eval did not write /data/result.json.", 6)
-        try:
-            result = json.loads(result_path.read_text())
-        except json.JSONDecodeError as e:
-            raise _die(f"/data/result.json is not valid JSON: {e}", 6)
-
-        _validate_solo_result(result)
-        print("\n✓ eval succeeded. result.json:")
-        print(json.dumps(result, indent=2, sort_keys=True))
-        raise SystemExit(0)
-
-
-def _validate_solo_result(result: object) -> None:
+    Both solo and duel go through a referee, so both write the same shape:
+    {raw_scores, winner, terminal_reason, steps, metadata}. (An earlier version of this
+    checked a top-level `raw_score`/`eval_time_in_seconds` pair — that was the retired
+    single-sandbox contract and never matched what apex_sdk.gym_v1.GameResult serializes.)
+    """
     if not isinstance(result, dict):
         raise _die(f"result.json must be a JSON object, got {type(result).__name__}.", 6)
-    # bool is a subclass of int/float — reject it explicitly for numeric fields.
-    for field in ("raw_score", "eval_time_in_seconds"):
+    scores = result.get("raw_scores")
+    if not isinstance(scores, list) or not scores:
+        raise _die(f"result.json.raw_scores must be a non-empty array, got {scores!r}.", 6)
+    for i, v in enumerate(scores):
+        # bool is a subclass of int/float — reject it explicitly for numeric fields.
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise _die(f"result.json.raw_scores[{i}] must be a number, got {v!r}.", 6)
+    for field in ("winner", "steps"):
         val = result.get(field)
-        if isinstance(val, bool) or not isinstance(val, (int, float)):
-            raise _die(f"result.json.{field} must be a number, got {val!r}.", 6)
+        if isinstance(val, bool) or not isinstance(val, int):
+            raise _die(f"result.json.{field} must be an integer, got {val!r}.", 6)
+    if not isinstance(result.get("terminal_reason"), str):
+        raise _die(f"result.json.terminal_reason must be a string, got {result.get('terminal_reason')!r}.", 6)
     if not isinstance(result.get("metadata"), dict):
         raise _die(f"result.json.metadata must be an object, got {result.get('metadata')!r}.", 6)
+
+
+def _resolve_private_data(spec: LoadedSpec, pairs: list[str]) -> list[tuple[Path, str]]:
+    """Map --private-data MOUNT_PATH=HOST_PATH args onto the spec's private_data entries.
+
+    On the platform these objects are fetched from R2 and sha256-verified before the job
+    starts. Locally the designer supplies the file and we verify the SAME digest — so a
+    stale or wrong local labels file fails loudly here instead of silently scoring against
+    the wrong ground truth. Returns (host_path, mount_path) pairs for the REFEREE
+    container's read-only bind mounts.
+    """
+    declared = {p["mount_path"]: p for p in spec.private_data}
+    supplied: dict[str, Path] = {}
+
+    for pair in pairs:
+        mount, sep, host = pair.partition("=")
+        if not sep or not mount.startswith("/") or not host:
+            raise _die(f"--private-data must be MOUNT_PATH=HOST_PATH with an absolute MOUNT_PATH: {pair!r}", 2)
+        if mount not in declared:
+            raise _die(
+                f"--private-data {mount} is not declared in the spec's private_data "
+                f"(declared: {sorted(declared) or 'none'}).",
+                2,
+            )
+        p = Path(host).expanduser()
+        if not p.is_file():
+            raise _die(f"--private-data host file not found: {host}", 2)
+        supplied[mount] = p.resolve()
+
+    missing = sorted(set(declared) - set(supplied))
+    if missing:
+        raise _die(
+            "spec declares private_data with no local file supplied; add "
+            + " ".join(f"--private-data {m}=<path>" for m in missing),
+            2,
+        )
+
+    for mount, path in supplied.items():
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != declared[mount]["sha256"]:
+            raise _die(
+                f"--private-data {mount} sha256 mismatch: local file is {digest}, "
+                f"spec pins {declared[mount]['sha256']}",
+                2,
+            )
+
+    return [(supplied[m], m) for m in sorted(supplied)]
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -223,7 +221,8 @@ def cmd_run(args: argparse.Namespace) -> None:
     # duel). For solo we still validate the player args so mistakes surface as exit 2.
     if not spec.is_duel:
         _validate_solo_args(args)
-    _print_plan(spec, args.env)
+    private_mounts = _resolve_private_data(spec, args.private_data)
+    _print_plan(spec, args.env, private_mounts)
     print(
         "\n⚠ Referee-driven local run (player + referee sandboxes on a shared network) is not\n"
         "  implemented in `apex-dev run` yet. `apex-dev preflight` + the plan above validate the\n"
@@ -243,7 +242,7 @@ def _validate_solo_args(args: argparse.Namespace) -> None:
         raise _die("provide exactly one of --dockerfile or --image.", 2)
 
 
-def _print_plan(spec: LoadedSpec, env: str) -> None:
+def _print_plan(spec: LoadedSpec, env: str, private_mounts: list[tuple[Path, str]] | None = None) -> None:
     s = spec.raw
     ep = s["entrypoints"]["evaluate"]
     print("\nExecution plan")
@@ -260,6 +259,20 @@ def _print_plan(spec: LoadedSpec, env: str) -> None:
     print(f"  referee proto  : {r['protocol']}")
     print(f"  referee image  : {r['image']['ref']}@{r['image']['digest']}")
     print(f"  referee to     : {r['timeout_s']}s")
+    # The frozen model is reachable from the REFEREE only: that is what keeps the token
+    # meter honest, so the plan states the topology explicitly.
+    if spec.base_model:
+        bm = spec.base_model
+        print(
+            f"  base model     : {bm['served_model']} -> referee only "
+            f"({bm['max_tokens_per_episode']} tokens/episode, temp={bm.get('temperature', 0)})"
+        )
+    # private_data is REFEREE-only by contract: a miner-reachable container that can read the
+    # answer key defeats the whole design. These never go on the player's mounts.
+    for host_path, mount_path in private_mounts or []:
+        print(f"  private mount  : {host_path} -> {mount_path} (referee only, ro)")
+    if spec.private_data and not private_mounts:
+        print("  private mount  : (none supplied — pass --private-data MOUNT_PATH=HOST_PATH)")
     if spec.is_duel:
         d = s["duel"]
         print(
@@ -285,6 +298,15 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--dockerfile", help="build the player image from this Dockerfile (build context = --context)")
     run.add_argument("--context", help="docker build context for --dockerfile (default: the Dockerfile's directory)")
     run.add_argument("--image", help="use this prebuilt local image tag instead of building")
+    run.add_argument(
+        "--private-data",
+        action="append",
+        default=[],
+        metavar="MOUNT_PATH=HOST_PATH",
+        help="local stand-in for one spec `private_data` entry: bind-mount HOST_PATH read-only at "
+        "MOUNT_PATH in the referee. Repeatable; required once per private_data entry. The file's "
+        "sha256 must match the spec (the platform verifies the same digest before every job).",
+    )
     run.add_argument("--env", default="stage", choices=["stage", "prod"], help="resource-ceiling env (default: stage)")
     run.set_defaults(func=cmd_run)
 

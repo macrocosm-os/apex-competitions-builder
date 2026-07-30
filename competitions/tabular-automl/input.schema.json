@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "tabular_automl round input",
+  "description": "Evaluation knobs for one round. The dataset itself (task type, features, correlations) is derived inside the referee from the platform's per-round SEED, so nothing about the actual data is carried here — only the (miner-visible, non-secret) operating limits.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "n_train",
+    "n_test",
+    "n_instances",
+    "max_train_time_s",
+    "inference_deadline_ms",
+    "max_complexity"
+  ],
+  "properties": {
+    "n_train": {
+      "type": "integer",
+      "minimum": 50,
+      "maximum": 5000,
+      "description": "Rows of labeled training data handed to the submission in reset()."
+    },
+    "n_test": {
+      "type": "integer",
+      "minimum": 20,
+      "maximum": 2000,
+      "description": "Rows of held-out data the submission must predict on in act()."
+    },
+    "n_instances": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Independent dataset draws of the round's task family that raw_score is averaged over. A single draw per round is an under-sized evaluation (see HANDOFF.md Sec 4) -- this must be large enough that cross-round score variance stays well below the 1% takeover margin."
+    },
+    "max_train_time_s": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 300,
+      "description": "Hard wall-clock cap on EACH instance's reset()/fit call. Exceeding it on any instance is a gate failure for the whole round (raw_score 0), not a score penalty."
+    },
+    "inference_deadline_ms": {
+      "type": "integer",
+      "minimum": 50,
+      "maximum": 60000,
+      "description": "Hard per-act() deadline for producing predictions on the test batch. Exceeding it is a gate failure."
+    },
+    "max_complexity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000,
+      "description": "Hard cap on the submission's self-reported model complexity (see README § complexity). Exceeding it is a gate failure, not a continuous penalty."
+    }
+  }
+}

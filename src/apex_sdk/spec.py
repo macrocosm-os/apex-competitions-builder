@@ -8,6 +8,7 @@ passes here is a spec the platform will accept.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 from dataclasses import dataclass
 from importlib import resources
@@ -27,6 +28,13 @@ ENV_CEILINGS: dict[str, dict[str, Any]] = {
     "stage": {"cpu_limit": 2, "mem_mi": 2048, "gpu": False},
     "prod": {"cpu_limit": 4, "mem_mi": 4096, "gpu": True},
 }
+
+# Only Macrocosmos-controlled object storage may back private_data: the referee has no
+# egress, so the platform is the only fetcher. Keep in sync with the worker's resolver.
+PRIVATE_DATA_SCHEMES = ("r2://",)
+# Paths the platform owns inside a sandbox. A private mount here would shadow the job's
+# own wiring (input/result files, the image's own /app tree).
+_RESERVED_MOUNTS = ("/data", "/app", "/proc", "/sys", "/dev", "/etc")
 
 
 class SpecError(ValueError):
@@ -56,6 +64,20 @@ class LoadedSpec:
     @property
     def is_duel(self) -> bool:
         return self.raw["kind"] == "duel"
+
+    @property
+    def artifact_type(self) -> str:
+        return self.raw["submission"]["artifact_type"]
+
+    @property
+    def private_data(self) -> list[dict[str, Any]]:
+        """Private objects the platform mounts read-only into the referee ([] if none)."""
+        return self.raw.get("private_data") or []
+
+    @property
+    def base_model(self) -> dict[str, Any]:
+        """The frozen base model the platform serves for this competition ({} if none)."""
+        return self.raw.get("base_model") or {}
 
 
 def load_schema() -> dict[str, Any]:
@@ -103,24 +125,107 @@ def validate_dict(spec: dict[str, Any]) -> None:
         raise SpecError("spec failed apex.competition.v1 validation:\n" + "\n".join(lines))
 
 
-def check_resource_ceilings(spec: dict[str, Any], env: str) -> None:
-    """Enforce the per-env resource ceilings and floors. Raises SpecError on violation."""
-    if env not in ENV_CEILINGS:
-        raise SpecError(f"unknown env {env!r}; expected one of {sorted(ENV_CEILINGS)}")
-    ceiling = ENV_CEILINGS[env]
-    res = spec["resources"]
-
+def _check_resources_block(res: dict[str, Any], env: str, ceiling: dict[str, Any], where: str) -> None:
     if res["cpu_limit"] > ceiling["cpu_limit"]:
-        raise SpecError(f"resources.cpu_limit {res['cpu_limit']} exceeds {env} ceiling {ceiling['cpu_limit']}")
+        raise SpecError(f"{where}.cpu_limit {res['cpu_limit']} exceeds {env} ceiling {ceiling['cpu_limit']}")
 
     mem_mi = _parse_mem_to_mi(res["mem_limit"])
     if mem_mi > ceiling["mem_mi"]:
-        raise SpecError(f"resources.mem_limit {res['mem_limit']} exceeds {env} ceiling {ceiling['mem_mi']}Mi")
+        raise SpecError(f"{where}.mem_limit {res['mem_limit']} exceeds {env} ceiling {ceiling['mem_mi']}Mi")
     if mem_mi < _MEM_FLOOR_MI:
-        raise SpecError(f"resources.mem_limit {res['mem_limit']} below floor {_MEM_FLOOR_MI}Mi")
+        raise SpecError(f"{where}.mem_limit {res['mem_limit']} below floor {_MEM_FLOOR_MI}Mi")
 
     if res["gpu_count"] > 0 and not ceiling["gpu"]:
-        raise SpecError(f"resources.gpu_count {res['gpu_count']} but env {env!r} has no GPU pool")
+        raise SpecError(f"{where}.gpu_count {res['gpu_count']} but env {env!r} has no GPU pool")
+
+
+def check_resource_ceilings(spec: dict[str, Any], env: str) -> None:
+    """Enforce the per-env resource ceilings and floors on both the player's `resources`
+    and the referee's own, separate `resources` (optional -- most competitions only need
+    to judge, not compute, and never set it). Raises SpecError on violation."""
+    if env not in ENV_CEILINGS:
+        raise SpecError(f"unknown env {env!r}; expected one of {sorted(ENV_CEILINGS)}")
+    ceiling = ENV_CEILINGS[env]
+
+    _check_resources_block(spec["resources"], env, ceiling, "resources")
+
+    referee_resources = spec.get("referee", {}).get("resources")
+    if referee_resources is not None:
+        _check_resources_block(referee_resources, env, ceiling, "referee.resources")
+
+
+def _is_under(child: str, parent: str) -> bool:
+    return child == parent or child.startswith(parent.rstrip("/") + "/")
+
+
+def check_private_data(spec: dict[str, Any]) -> None:
+    """Enforce the private_data rules JSON Schema cannot express.
+
+    The schema already covers per-field shape (uri scheme, absolute mount_path, sha256 hex).
+    What it cannot see is the relationship BETWEEN fields and entries: two entries fighting
+    over one mount point, or a mount that shadows the miner's own artifact. Both would be
+    silent misconfigurations at run time, so they are hard errors here — the same code the
+    platform syncer runs.
+    """
+    items = spec.get("private_data") or []
+    target_path = spec.get("submission", {}).get("target_path")
+    seen: set[str] = set()
+
+    for i, item in enumerate(items):
+        where = f"private_data[{i}]"
+        uri, mount = item["uri"], item["mount_path"]
+
+        if not uri.startswith(PRIVATE_DATA_SCHEMES):
+            raise SpecError(f"{where}.uri scheme not supported: {uri!r}; expected one of {PRIVATE_DATA_SCHEMES}")
+
+        if not mount.startswith("/") or mount != posixpath.normpath(mount):
+            raise SpecError(f"{where}.mount_path must be an absolute, normalized file path: {mount!r}")
+        if mount in seen:
+            raise SpecError(f"{where}.mount_path duplicates an earlier mount: {mount!r}")
+        seen.add(mount)
+        for reserved in _RESERVED_MOUNTS:
+            if _is_under(mount, reserved):
+                raise SpecError(f"{where}.mount_path is a platform-reserved location: {mount!r} (under {reserved})")
+        if target_path and (_is_under(mount, target_path) or _is_under(target_path, mount)):
+            raise SpecError(
+                f"{where}.mount_path {mount!r} collides with submission.target_path {target_path!r}; "
+                "private data is mounted in the referee and must never overlap the miner artifact path"
+            )
+
+
+def check_base_model(spec: dict[str, Any]) -> None:
+    """Enforce the egress topology a declared `base_model` requires.
+
+    The schema covers the block's own shape. What it cannot state is the *reason* the
+    topology has to be exactly this, and getting it wrong does not fail loudly at run
+    time — it silently produces an unfair or unmeterable competition:
+
+    - The referee needs egress or it cannot reach the endpoint at all.
+    - The player must NOT have egress. If a harness could call the model directly it
+      would bypass the referee's meter entirely, so the token budget (usually the
+      scarce resource the whole competition is built around) would stop binding, and
+      submissions would be ranked on how much inference they were willing to steal.
+    """
+    model = spec.get("base_model")
+    if not model:
+        # A referee with egress and nothing to reach is a mistake worth naming.
+        if spec.get("referee", {}).get("allow_internet"):
+            raise SpecError(
+                "referee.allow_internet is true but the spec declares no `base_model`; "
+                "referee egress exists only to reach a platform-declared endpoint"
+            )
+        return
+
+    if not spec.get("referee", {}).get("allow_internet"):
+        raise SpecError(
+            "spec declares `base_model` but referee.allow_internet is not true; "
+            "the referee is the only party that may call the model and it needs egress to do so"
+        )
+    if spec.get("entrypoints", {}).get("evaluate", {}).get("allow_internet"):
+        raise SpecError(
+            "spec declares `base_model` and entrypoints.evaluate.allow_internet is true; "
+            "a player that can reach the model directly bypasses the referee's token meter"
+        )
 
 
 def load_spec(path: str | Path, env: str | None = "stage") -> LoadedSpec:
@@ -142,6 +247,9 @@ def load_spec(path: str | Path, env: str | None = "stage") -> LoadedSpec:
 
     validate_dict(raw)
     input_schema = _resolve_input_schema(raw, spec_path)
+    # Structural and env-independent: surface these even when ceiling checks are skipped.
+    check_private_data(raw)
+    check_base_model(raw)
     if env is not None:
         check_resource_ceilings(raw, env)
 
