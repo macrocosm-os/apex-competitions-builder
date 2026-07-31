@@ -1,0 +1,7 @@
+interface:
+  display_name: "Apex Competition Builder"
+  short_description: "Design and ship an Apex competition for onboarding."
+  default_prompt: "Use $apex-competition-builder to create an Apex competition in a separate repository, starting with its success statement."
+
+policy:
+  allow_implicit_invocation: true
