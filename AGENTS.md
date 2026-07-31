@@ -87,7 +87,6 @@ now.
 | `images/` | Base image Dockerfiles — unpublished, see the vendoring rule above. |
 | `tests/fixtures/solo/` | A test fixture spec. **Not** an example to copy. |
 | `.codex-plugin/`, `.grok-plugin/`, `.agents/plugins/` | Codex and Grok plugin and marketplace manifests. |
-| `scripts/build-skill.sh` | Builds the portable `.skill` archive without shipping repo-only tooling inside the skill. |
 
 ### Setup, test, lint
 
@@ -98,9 +97,9 @@ uv run ruff check .
 uv run black --check .
 ```
 
-CI (`.github/workflows/ci.yml`) runs those three on Python 3.11 and 3.12, then builds the portable
-skill archive. Run the three checks before proposing a change. Line length is **120** (`ruff` and
-`black` are both configured for it in `pyproject.toml`) — do not reformat to 88.
+CI (`.github/workflows/ci.yml`) runs those three on Python 3.11 and 3.12. Run them before proposing
+a change. Line length is **120** (`ruff` and `black` are both configured for it in
+`pyproject.toml`) — do not reformat to 88.
 
 ### Constraints that aren't obvious from the source
 

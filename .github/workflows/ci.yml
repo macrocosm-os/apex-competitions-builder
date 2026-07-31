@@ -39,6 +39,3 @@ jobs:
 
       - name: Tests (pytest)
         run: uv run --extra dev pytest -q
-
-      - name: Build portable skill archive
-        run: bash scripts/build-skill.sh
