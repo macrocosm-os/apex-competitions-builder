@@ -34,11 +34,53 @@ The implementation details stay inside the skill:
 
 Agents: also read [AGENTS.md](AGENTS.md).
 
+## Install the competition-builder skill
+
+Install the canonical skill for Codex, OpenCode, Cursor, Gemini CLI, or another Agent Skills host:
+
+```bash
+npx skills add macrocosm-os/apex-competitions-builder \
+  --skill apex-competition-builder -g
+```
+
+Target one or more hosts explicitly when needed:
+
+```bash
+npx skills add macrocosm-os/apex-competitions-builder -g -a codex
+npx skills add macrocosm-os/apex-competitions-builder \
+  --skill apex-competition-builder -g -a opencode -y
+npx skills add macrocosm-os/apex-competitions-builder -g -a codex -a gemini-cli
+```
+
+OpenCode consumes the canonical Agent Skill directly; it does not need a separate plugin manifest.
+
+Codex and Grok can also install the repository as a native marketplace plugin:
+
+```bash
+codex plugin marketplace add macrocosm-os/apex-competitions-builder
+codex plugin add apex-competition-builder@apex-competitions-builder
+
+grok plugin marketplace add macrocosm-os/apex-competitions-builder
+grok plugin install apex-competition-builder --trust
+```
+
+Update Agent Skills installs with `npx skills update apex-competition-builder -g`. Codex refreshes
+the marketplace with `codex plugin marketplace upgrade apex-competitions-builder`; rerun
+`codex plugin add` to install the newly published version. Update Grok with
+`grok plugin update apex-competition-builder`.
+
+Use one installation method per host to avoid loading the same skill twice. These commands make
+this repository an installable community marketplace. Listing it in a vendor-operated public
+catalog is a separate post-release submission: OpenAI reviews public plugins for its universal
+directory, while xAI accepts pinned-source pull requests to `xai-org/plugin-marketplace`.
+
 ## What's in here
 
 | Path | What it is |
 |------|-----------|
 | [`skills/apex-competition-builder/`](skills/apex-competition-builder/) | The design guide + agent skill. |
+| [`.codex-plugin/plugin.json`](.codex-plugin/plugin.json) | Codex plugin manifest for the canonical skill. |
+| [`.grok-plugin/`](.grok-plugin/) | Grok plugin and marketplace manifests. |
 | [`src/apex_sdk/gym_v1/`](src/apex_sdk/gym_v1/) | The wire protocol: `Player`/`serve`, `Referee`/`GameResult`/`RefereeContext`, `PlayerClient`. **The directory you vendor.** Stdlib-only. |
 | [`src/apex_sdk/schema/apex.competition.v1.json`](src/apex_sdk/schema/apex.competition.v1.json) | The spec schema. The platform validates against this exact file. |
 | [`src/apex_sdk/spec.py`](src/apex_sdk/spec.py) | `load_spec`, `validate_dict`, `load_schema`, `check_resource_ceilings`. |

@@ -1,0 +1,20 @@
+{
+  "name": "apex-competitions-builder",
+  "interface": {
+    "displayName": "Apex Competition Builder"
+  },
+  "plugins": [
+    {
+      "name": "apex-competition-builder",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/macrocosm-os/apex-competitions-builder.git"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
