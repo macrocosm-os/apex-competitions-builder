@@ -1,0 +1,30 @@
+{
+  "name": "apex-competitions-builder",
+  "owner": {
+    "name": "Macrocosmos.ai",
+    "url": "https://macrocosmos.ai"
+  },
+  "metadata": {
+    "description": "Marketplace for fully agentic Apex competition development."
+  },
+  "plugins": [
+    {
+      "name": "apex-competition-builder",
+      "description": "Design, implement, validate, and prepare Apex competitions for onboarding.",
+      "version": "0.3.0",
+      "author": {
+        "name": "Macrocosmos.ai",
+        "url": "https://macrocosmos.ai"
+      },
+      "source": "./",
+      "category": "development",
+      "homepage": "https://github.com/macrocosm-os/apex-competitions-builder",
+      "tags": [
+        "apex",
+        "competition",
+        "bittensor",
+        "evaluation"
+      ]
+    }
+  ]
+}
