@@ -21,16 +21,16 @@ Read first (public):
 ## Start in a separate competition repository
 
 Never implement a competition inside the toolkit or an installed copy of this skill. Ask the user
-for a destination directory, then run the bundled scaffold from this skill's directory:
+for a destination directory outside the toolkit, then create the new repository from the
+[organization-owned worked example](https://github.com/macrocosm-os/apex-competition-hello-world)
+using the host's Git tools. Keep the template remote as `template-upstream` so the user can add
+their own `origin`, and preserve the checked-out template commit in Git history as provenance.
 
-```bash
-python3 scripts/scaffold_competition.py /absolute/path/to/apex-competition-<name>
-```
-
-The scaffold clones the worked example, renames its `origin` remote to `template-upstream`, and
-re-vendors `gym_v1` from the toolkit release pinned by the script. It refuses destinations inside
-an `apex-competitions-builder` checkout. After scaffolding, perform every design and implementation
-step in the new repository.
+The worked example already contains the vendored, top-level `gym_v1` package in both images. Keep
+those copies unless deliberately updating to a different toolkit release. For an update, copy
+`src/apex_sdk/gym_v1/` from one pinned toolkit tag into both `player/gym_v1/` and
+`referee/gym_v1/`, then rewrite internal imports from `apex_sdk.gym_v1` to top-level `gym_v1`.
+Perform every design and implementation step in the new competition repository.
 
 ## What you deliver
 
@@ -165,8 +165,10 @@ repo**. In *your* competition repo the vendored package is top-level — drop th
 
 ## Test locally, then ship
 
+Run `apex-dev` from a separate toolkit checkout pinned to the release used by the competition. Do
+not run `pip install -e .` in the competition repository and do not guess a package from PyPI.
+
 ```bash
-pip install -e .        # the toolkit
 apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
              --submission ./player/submission.py --dockerfile ./player/Dockerfile
