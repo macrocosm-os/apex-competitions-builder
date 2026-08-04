@@ -32,8 +32,10 @@ and edit it. The full contract is in
 - `resources` — per-sandbox `cpu_limit`, `mem_limit`, `gpu_count`. Must fit the env ceilings
   (stage: 2 CPU / 2Gi; prod: 4 CPU / 4Gi; memory floor 256Mi). GPUs are gated by the platform.
 - `image` — your **player** image, **pinned by digest** (tags are forbidden).
-- `submission` — `artifact_type` (`code` | `torchscript` | `onnx`), `max_size_mb`, and the
-  `target_path` where the platform writes the miner's artifact for your player to load.
+- `submission` — `artifact_type` (`json` | `csv` | `onnx` | `wasm` | `torchscript` | `code` |
+  `archive`), `max_size_mb`, and the `target_path` where the platform writes the miner's artifact
+  for your player to load. `archive` also needs a `submission.archive` block. See
+  [Submission artifact types](#submission-artifact-types) below.
 - `input_schema` — a JSON Schema (inline or `$ref`) for the round input. Emit it from your
   pydantic model rather than hand-writing it.
 - `defaults` — eval/scheduling knobs: baselines, round length, reveal window, `lower_is_better`.
@@ -45,6 +47,53 @@ and edit it. The full contract is in
   `/app/referee.py`.
 - `duel` — required for duels only: `players_per_match`, `num_games_default`, `swap_sides`.
 - `signature` — the keyless cosign identity the platform verifies your images against.
+
+### Submission artifact types
+
+`submission.artifact_type` declares what the miner uploads and how the platform hands it to your
+player. Pick the **most constrained type that can express a winning solution** — the list is in
+increasing order of attack surface, and every step down costs you screening you'd rather not own.
+
+| `artifact_type` | What the miner uploads | Written to `target_path` as | Layer-1 screening |
+|---|---|---|---|
+| `json` | A UTF-8 JSON document — a policy table, parameter vector, strategy spec | the file | parse validity, `max_rows`, `max_json_depth` |
+| `csv` | A UTF-8 CSV with a header row — a lookup table, schedule, ranking | the file | parse validity, `max_rows`, `max_columns`, `required_columns` |
+| `onnx` | An ONNX graph | the file | weights validator (`min_weight_bytes`, `max_code_weight_ratio`) |
+| `wasm` | A WebAssembly module (`\0asm` magic) | the file | module header, `wasm_allowed_imports`, `wasm_max_memory_pages` |
+| `torchscript` | A TorchScript `.pt` archive | the file | weights validator |
+| `code` | One source file | the file | ASTGuard (`extra_forbidden_*`, `block_dynamic_getattr`) |
+| `archive` | A `tar.gz` / `tar` / `zip` bundle — a multi-module Python package | an **extracted directory** | ASTGuard per Python member, `allowed_member_extensions`, extraction bounds |
+
+`json` and `csv` are the closed-grammar formats to reach for first: there is no code to screen, and
+your player validates structurally with typed errors. `wasm` is the middle ground when the
+submission genuinely has to *compute* — a wasm module has no ambient authority, so it can only call
+host functions you explicitly import (declare the allowlist in `screening.wasm_allowed_imports`;
+the default is none at all).
+
+**Multiple files / tarballs.** `artifact_type: archive` is the "several Python modules" case. Its
+`target_path` is the **directory** the bundle is extracted into, and it requires a
+`submission.archive` block that bounds extraction:
+
+```yaml
+submission:
+  artifact_type: archive
+  max_size_mb: 2                    # bounds the COMPRESSED upload
+  target_path: /app/submission      # a directory; extracted here
+  archive:
+    format: tar.gz                  # tar.gz | tar | zip
+    entry_file: main.py             # what your player imports, relative to the extraction root
+    max_uncompressed_mb: 16         # the decompression-bomb bound; must be >= max_size_mb
+    max_files: 200
+
+screening:
+  allowed_member_extensions: [".py"]   # anything else in the bundle fails screening
+  extra_forbidden_modules: [socket, subprocess]
+```
+
+Members that are absolute, contain a `..` component, or are symlinks are **rejected** — the
+submission fails, nothing is sanitised. Do set `allowed_member_extensions`: without it a bundle can
+carry any file type, and a `[".py"]`-only bundle is the whole reason to prefer `archive` over an
+opaque blob.
 
 ## 3. Implement the image(s)
 
@@ -106,8 +155,9 @@ result to cover up a bug; let it fail.
 ## 4. Test locally
 
 ```bash
-# 1. Validate spec + input fixture. No Docker.
-apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
+# 1. Validate spec + input fixture + a sample submission. No Docker.
+apex-dev preflight --spec ./spec.yaml --input fixtures/input.json \
+                   --submission ./fixtures/reference_solution.json
 
 # 2. Resolve + preview the run contract (player + referee, resources, protocol).
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
@@ -117,7 +167,14 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 
 `apex-dev preflight` validates the spec against `apex.competition.v1` (including the ceilings)
 and your input fixture against `input_schema` — a spec that passes preflight is one the platform
-will accept at sync time. `apex-dev run` validates the args and prints the resolved plan
+will accept at sync time. `--submission` additionally checks a sample artifact against the declared
+`artifact_type` (JSON/CSV parse validity, wasm magic bytes, archive extraction bounds and member
+safety, size ceilings) so your reference solution fails locally with a readable reason instead of
+being rejected by the platform's screener after upload. For `artifact_type: archive` you can pass a
+**directory** and it is validated as the tree that would be bundled. Preflight also prints `⚠`
+advisories for the mistakes the platform tolerates silently — a `target_path` extension that
+disagrees with the artifact type, or a `screening` knob that doesn't apply to it (and so is
+ignored). `apex-dev run` validates the args and prints the resolved plan
 (player + referee images, protocol, resources); **referee-driven local execution (spinning up the
 player + referee sandboxes on a shared network) is not implemented yet** and exits 3 — run on
 stage to execute. A local 2-sandbox harness is a follow-up.

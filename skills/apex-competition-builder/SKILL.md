@@ -82,11 +82,14 @@ The goal statement is a required section of `HANDOFF.md` and drives everything d
 
 ### 2. Pick the most constrained submission format that can express a winning solution
 
-`submission.artifact_type` supports `onnx`, `torchscript`, and `code`. In order of preference:
+`submission.artifact_type` supports `json`, `csv`, `onnx`, `wasm`, `torchscript`, `code`, and `archive` — listed here in order of preference, which is also increasing attack surface:
 
-1. **`onnx`** — a pure model artifact with a closed grammar. The miner sends no executable code: your player image loads the graph, validates shapes/opsets with typed errors, and serves it. Nothing to screen.
-2. **`torchscript`** — still an artifact, but a TorchScript archive contains Python code by design, so it needs structural screening (the generic Layer-1 weights validator: size, magic bytes, code-to-weights ratio). Use it when ONNX can't express the model.
-3. **`code`** — the miner's source runs inside the player sandbox. Attack surface is bounded by the sandbox (no egress, resource caps, timeouts) plus Layer-1 AST screening, but you now own the problem of miner code probing your protocol instead of solving your task.
+1. **`json` / `csv`** — pure data with a closed grammar: a policy table, a parameter vector, a strategy spec, a schedule, a ranking. The miner sends nothing executable at all, and your player validates it structurally with typed errors before serving. Layer-1 checks parse validity and the shape knobs (`max_rows`, `max_columns`, `required_columns`, `max_json_depth`). If your problem can be expressed this way, stop here — this is the format that makes screening a non-issue.
+2. **`onnx`** — a pure model artifact with a closed grammar. The miner sends no executable code: your player image loads the graph, validates shapes/opsets with typed errors, and serves it. Nothing to screen.
+3. **`wasm`** — a WebAssembly module. The submission *computes*, but with **no ambient authority**: a wasm module can only call host functions you explicitly import, so `screening.wasm_allowed_imports` (default: none) is a real capability boundary rather than a blocklist you hope is complete. This is the type to reach for when miners need real algorithmic freedom but you don't want to hand them a Python interpreter — a search heuristic or a controller, expressed as a pure function.
+4. **`torchscript`** — still an artifact, but a TorchScript archive contains Python code by design, so it needs structural screening (the generic Layer-1 weights validator: size, magic bytes, code-to-weights ratio). Use it when ONNX can't express the model.
+5. **`code`** — the miner's source runs inside the player sandbox. Attack surface is bounded by the sandbox (no egress, resource caps, timeouts) plus Layer-1 AST screening, but you now own the problem of miner code probing your protocol instead of solving your task.
+6. **`archive`** — a `tar.gz`/`tar`/`zip` bundle of several files (typically a multi-module Python package), extracted into `target_path` as a directory. Everything true of `code` is true here, over a wider surface: N files to AST-screen instead of one, plus extraction itself as an attack surface. It requires a `submission.archive` block (`format`, `entry_file`, `max_uncompressed_mb`, `max_files`) bounding extraction, and you should set `screening.allowed_member_extensions` (e.g. `[".py"]`). Absolute, `..`-containing, and symlink members are rejected outright. Justify it the way you'd justify `code`, and only when a solution genuinely doesn't fit in one file — "it's tidier as a package" isn't a reason to widen a trust boundary.
 
 Rule of thumb: if you're tempted to screen submissions for "dangerous code," first ask whether the competition can be reformulated so the submission isn't code at all. A model-artifact competition with a hard-coded architecture is strictly more robust than a "submit any code" competition with screening bolted on — and it pushes miners toward better solutions of the actual problem instead of engineering around your checks. We steer, not enforce: if code is truly required, use it, but treat that as a cost you justified, not a default.
 
@@ -160,7 +163,7 @@ repo**. In *your* competition repo the vendored package is top-level — drop th
 
 **Screening** — two layers, neither is partner Python in the platform:
 
-- *Layer 1 (declarative)*: the `screening` block in your spec configures the platform's generic screener — AST bans for `code` (`extra_forbidden_modules`, `extra_forbidden_calls`, …) or the weights validator for `torchscript`/`onnx`, plus `max_size_mb`. It's a tripwire, not the boundary — the sandbox is the actual defense, so it's fine that it's visible in the spec.
+- *Layer 1 (declarative)*: the `screening` block in your spec configures the platform's generic screener, keyed by `artifact_type` — AST bans for `code`/`archive` (`extra_forbidden_modules`, `extra_forbidden_calls`, …), the weights validator for `torchscript`/`onnx`, shape limits for `json`/`csv` (`max_rows`, `max_columns`, `required_columns`, `max_json_depth`), the import allowlist for `wasm` (`wasm_allowed_imports`, `wasm_max_memory_pages`), member limits for `archive` (`allowed_member_extensions`), plus `max_size_mb` for all of them. Knobs for a type other than the one you declared are **silently ignored** by the platform — `apex-dev preflight` warns you about that, so run it. It's a tripwire, not the boundary — the sandbox is the actual defense, so it's fine that it's visible in the spec.
 - *Layer 2 (optional, bespoke)*: `entrypoints.screen` runs your checks in a separate private image before evaluation; exit 0 = pass. Use it only for behavioural checks that must stay secret.
 
 ## Test locally, then ship
@@ -169,12 +172,13 @@ Run `apex-dev` from a separate toolkit checkout pinned to the release used by th
 not run `pip install -e .` in the competition repository and do not guess a package from PyPI.
 
 ```bash
-apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
+apex-dev preflight --spec ./spec.yaml --input fixtures/input.json \
+                   --submission ./fixtures/reference_solution.json
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
              --submission ./player/submission.py --dockerfile ./player/Dockerfile
 ```
 
-`apex-dev preflight` validates your spec against `apex.competition.v1` (including resource ceilings) and your fixture against `input_schema` — a spec that passes preflight is one the platform will accept at sync time. `apex-dev run` validates the run arguments and prints the resolved execution plan; as of now it does **not** yet execute the player+referee pair locally (that harness is a toolkit follow-up), so exercise the full loop by running your two images by hand on a shared Docker network with the injected env vars, and validate on stage before launch. Test the sandboxed leg honestly: `docker run` your player with egress blocked and the spec's resource limits.
+`apex-dev preflight` validates your spec against `apex.competition.v1` (including resource ceilings) and your fixture against `input_schema` — a spec that passes preflight is one the platform will accept at sync time. Pass `--submission` to also check a sample artifact against your declared `artifact_type` (parse validity, wasm magic, archive extraction bounds and member safety, size ceilings); for `artifact_type: archive` a directory works and is validated as the tree that would be bundled. Run it against your reference solution *and* against a deliberately malformed one — a competition whose format checks you never watched fail is a competition whose miners will find out for you. `apex-dev run` validates the run arguments and prints the resolved execution plan; as of now it does **not** yet execute the player+referee pair locally (that harness is a toolkit follow-up), so exercise the full loop by running your two images by hand on a shared Docker network with the injected env vars, and validate on stage before launch. Test the sandboxed leg honestly: `docker run` your player with egress blocked and the spec's resource limits.
 
 ## Build checklist
 
