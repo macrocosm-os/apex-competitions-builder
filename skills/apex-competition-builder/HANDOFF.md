@@ -113,10 +113,14 @@ Written evidence, not intent — run the procedure in
 9. **Referee state.** Is your referee deterministic and stateless across
    games/matches? Any caches, temp files, or logs keyed on
    submission-controlled values?
-10. **Code execution.** If `artifact_type: code`: why could the format not
-    be constrained to `onnx`/`torchscript`? Which `screening` extras does
-    your spec add to the base forbidden sets? If artifacts: can the format
-    smuggle code (TorchScript-style), and what structural checks block it?
+10. **Code execution.** If `artifact_type: code` or `archive`: why could the
+    format not be constrained to `json`/`csv`/`onnx`/`wasm`? Which `screening`
+    extras does your spec add to the base forbidden sets? For `archive`, why
+    does a solution not fit in one file, and what are your extraction bounds
+    (`max_uncompressed_mb`, `max_files`) and `allowed_member_extensions`?
+    If artifacts: can the format smuggle code (TorchScript-style), and what
+    structural checks block it? For `wasm`, which host imports do you grant
+    in `wasm_allowed_imports`, and why is each one necessary?
 11. **Player-image hygiene.** The player image is miner-reachable and may be
     public (repo/image visibility is your choice) — treat its contents as
     exposable and confirm it contains no ground truth, judge configuration, or

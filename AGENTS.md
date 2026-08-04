@@ -83,6 +83,7 @@ now.
 | `src/apex_sdk/spec.py` | `load_spec`, `validate_dict`, `load_schema`, `check_resource_ceilings`, `LoadedSpec`, `SpecError`. |
 | `src/apex_sdk/gym_v1/` | `player.py` (`Player`, `serve`), `referee.py` (`Referee`, `GameResult`, `RefereeContext`), `client.py` (`PlayerClient`, `PlayerError`). |
 | `src/apex_sdk/dev/cli.py` | `apex-dev preflight` / `apex-dev run`. |
+| `src/apex_sdk/dev/artifacts.py` | `check_artifact` / `materialize` — validates a local submission against `submission.artifact_type` and lays it out the way the platform does. Stdlib only. |
 | `docs/authoring.md` | The authoring flow. Authoritative for mechanics. |
 | `images/` | Base image Dockerfiles — unpublished, see the vendoring rule above. |
 | `tests/fixtures/solo/` | A test fixture spec. **Not** an example to copy. |
@@ -113,6 +114,13 @@ reviewable release PR; merging it creates the version tag and GitHub release.
 against, and `(id, version)` is immutable once a competition syncs. Never loosen or rename a field
 to make a test pass. Additive, backward-compatible changes only; anything else needs a new schema
 version and coordination with the platform.
+
+**`submission.artifact_type` is a platform capability, not just a string.** The enum
+(`json`, `csv`, `onnx`, `wasm`, `torchscript`, `code`, `archive`) is mirrored by
+`spec.ARTIFACT_TYPES` and asserted equal in `tests/test_submission_types.py` — a type the platform
+can't write into the sandbox must not appear here, and vice versa. `screening` knobs are keyed by
+artifact type; the platform ignores the ones that don't apply, so `spec.submission_advisories`
+warns instead of erroring (erroring would break already-synced specs).
 
 **`gym_v1` must stay stdlib-only.** It exists to be copied into competition repos. A runtime
 dependency there becomes a dependency every competition image has to install and pin. The toolkit's own

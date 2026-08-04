@@ -81,18 +81,49 @@
       "required": ["artifact_type", "max_size_mb", "target_path"],
       "properties": {
         "artifact_type": {
-          "enum": ["code", "torchscript", "onnx"],
-          "description": "How the platform writes the miner's submission. code=raw source bytes, torchscript=.pt bytes, onnx=.onnx bytes."
+          "enum": ["json", "csv", "onnx", "wasm", "torchscript", "code", "archive"],
+          "description": "How the platform writes the miner's submission. All types except `archive` are single files written verbatim to target_path: json=UTF-8 JSON bytes, csv=UTF-8 CSV bytes (header row required), onnx=.onnx graph bytes, wasm=a WebAssembly module (\\0asm magic), torchscript=.pt bytes, code=raw source bytes. archive=a tar/tar.gz/zip bundle (e.g. a multi-module Python package) that the platform EXTRACTS into target_path, which is a directory for that type — it requires the `archive` block. Listed in order of increasing attack surface: prefer the most constrained type that can express a winning solution."
         },
         "max_size_mb": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "maximum": 2048
+          "maximum": 2048,
+          "description": "Ceiling on the bytes the miner uploads. For artifact_type: archive this bounds the COMPRESSED bundle; the extracted total is bounded by archive.max_uncompressed_mb."
         },
         "target_path": {
           "type": "string",
           "pattern": "^/",
-          "description": "Absolute path inside the sandbox where the platform writes the artifact. The image entrypoint loads it."
+          "description": "Absolute path inside the sandbox where the platform writes the artifact — the file itself for single-file types, or the directory the bundle is extracted into for artifact_type: archive. The image entrypoint loads it."
+        },
+        "archive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "entry_file", "max_uncompressed_mb", "max_files"],
+          "description": "Required for, and only valid for, artifact_type: archive. Bounds extraction so a bundle cannot become a decompression bomb or write outside target_path. Members that are absolute, contain a `..` component, or are symlinks/hardlinks are REJECTED (the submission fails), never silently sanitised.",
+          "properties": {
+            "format": {
+              "enum": ["tar.gz", "tar", "zip"],
+              "description": "Container format the miner uploads. The platform extracts exactly this format; a bundle that is not this format fails screening."
+            },
+            "entry_file": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^/]",
+              "description": "The file your player loads, relative to the extraction root (e.g. `main.py` or `pkg/main.py`). Must be relative with no `..` component, and must exist in the bundle."
+            },
+            "max_uncompressed_mb": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 4096,
+              "description": "Ceiling on TOTAL extracted bytes. Extraction aborts and the submission fails once the running total passes it — this is the decompression-bomb bound, so keep it close to what a real solution needs. Must be >= submission.max_size_mb."
+            },
+            "max_files": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "description": "Ceiling on the number of members in the bundle (directories included). Bounds inode exhaustion and extraction time."
+            }
+          }
         }
       }
     },
@@ -106,18 +137,25 @@
     "screening": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Layer-1 screening config for the GENERIC platform screener (no competition code). Optional — sensible defaults apply. Keyed by submission.artifact_type: `code` uses the ASTGuard knobs, `torchscript`/`onnx` use the weights-validator knobs. Forbidden-lists are a tripwire, not the boundary (the sandbox is the actual defense), so it is fine that they are visible in the spec.",
+      "description": "Layer-1 screening config for the GENERIC platform screener (no competition code). Optional — sensible defaults apply. Keyed by submission.artifact_type: `code` uses the ASTGuard knobs, `archive` uses the ASTGuard knobs against every Python member plus the `member_*` knobs, `torchscript`/`onnx` use the weights-validator knobs, `json`/`csv` use the data knobs, `wasm` uses the module knobs. Knobs for a type other than the declared one are ignored. Forbidden-lists are a tripwire, not the boundary (the sandbox is the actual defense), so it is fine that they are visible in the spec.",
       "properties": {
-        "max_size_mb": { "type": "number", "exclusiveMinimum": 0, "description": "Reject submissions larger than this (code and model)." },
-        "extra_forbidden_modules": { "type": "array", "items": { "type": "string" }, "description": "code: modules banned on top of the base ASTGuard set." },
-        "extra_forbidden_calls": { "type": "array", "items": { "type": "string" }, "description": "code: bare calls banned on top of the base set." },
-        "extra_forbidden_attr_calls": { "type": "array", "items": { "type": "string" }, "description": "code: attribute calls (e.g. os.open) banned on top of the base set." },
-        "extra_forbidden_attrs_by_module": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "code: module -> banned attribute names." },
-        "extra_forbidden_dunder_attrs": { "type": "array", "items": { "type": "string" }, "description": "code: dunder attributes banned on top of the base set." },
-        "extra_forbidden_attr_access": { "type": "array", "items": { "type": "string" }, "description": "code: attribute accesses (e.g. sys.modules) to block." },
-        "block_dynamic_getattr": { "type": "boolean", "description": "code: reject dynamic getattr/setattr." },
+        "max_size_mb": { "type": "number", "exclusiveMinimum": 0, "description": "Reject submissions larger than this (all types)." },
+        "extra_forbidden_modules": { "type": "array", "items": { "type": "string" }, "description": "code/archive: modules banned on top of the base ASTGuard set." },
+        "extra_forbidden_calls": { "type": "array", "items": { "type": "string" }, "description": "code/archive: bare calls banned on top of the base set." },
+        "extra_forbidden_attr_calls": { "type": "array", "items": { "type": "string" }, "description": "code/archive: attribute calls (e.g. os.open) banned on top of the base set." },
+        "extra_forbidden_attrs_by_module": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "code/archive: module -> banned attribute names." },
+        "extra_forbidden_dunder_attrs": { "type": "array", "items": { "type": "string" }, "description": "code/archive: dunder attributes banned on top of the base set." },
+        "extra_forbidden_attr_access": { "type": "array", "items": { "type": "string" }, "description": "code/archive: attribute accesses (e.g. sys.modules) to block." },
+        "block_dynamic_getattr": { "type": "boolean", "description": "code/archive: reject dynamic getattr/setattr." },
         "min_weight_bytes": { "type": "integer", "minimum": 0, "description": "model: minimum total tensor-weight bytes (rejects zero-weight heuristics)." },
-        "max_code_weight_ratio": { "type": "number", "exclusiveMinimum": 0, "description": "model: max code:weight size ratio (rejects logic-in-code exploits)." }
+        "max_code_weight_ratio": { "type": "number", "exclusiveMinimum": 0, "description": "model: max code:weight size ratio (rejects logic-in-code exploits)." },
+        "allowed_member_extensions": { "type": "array", "items": { "type": "string", "pattern": "^\\.[A-Za-z0-9._-]+$" }, "description": "archive: allowlist of member file extensions (e.g. [\".py\", \".json\"]). A member with any other extension fails screening. Omit to accept any extension — prefer setting it." },
+        "max_rows": { "type": "integer", "minimum": 1, "description": "json/csv: max CSV data rows, or max elements when the JSON document is a top-level array. Bounds parse cost in your player." },
+        "max_columns": { "type": "integer", "minimum": 1, "description": "csv: max columns in the header row." },
+        "required_columns": { "type": "array", "items": { "type": "string" }, "description": "csv: column names that must all be present in the header row." },
+        "max_json_depth": { "type": "integer", "minimum": 1, "description": "json: max nesting depth (rejects deeply-nested documents that blow the parser stack)." },
+        "wasm_allowed_imports": { "type": "array", "items": { "type": "string" }, "description": "wasm: allowlist of host imports as `module.name` (e.g. [\"env.log\"]). Any import outside it fails screening. Default: no imports at all — a pure computational module, which is the point of choosing wasm." },
+        "wasm_max_memory_pages": { "type": "integer", "minimum": 0, "description": "wasm: max declared/maximum memory pages (64KiB each). Bounds a module that asks for more address space than the sandbox has." }
       }
     },
     "defaults": {
@@ -277,6 +315,14 @@
     {
       "if": { "properties": { "kind": { "const": "solo" } } },
       "then": { "not": { "required": ["duel"] } }
+    },
+    {
+      "if": {
+        "properties": { "submission": { "properties": { "artifact_type": { "const": "archive" } }, "required": ["artifact_type"] } },
+        "required": ["submission"]
+      },
+      "then": { "properties": { "submission": { "required": ["archive"] } } },
+      "else": { "properties": { "submission": { "not": { "required": ["archive"] } } } }
     }
   ],
   "$defs": {

@@ -1,9 +1,11 @@
 """`apex-dev` — run and preflight a competition spec locally, exactly like the platform would.
 
 Commands:
-    apex-dev preflight --spec ./spec.yaml [--input fixtures/input.json] [--env stage]
+    apex-dev preflight --spec ./spec.yaml [--input fixtures/input.json]
+                       [--submission <path>] [--env stage]
         Validate the spec against apex.competition.v1, enforce resource ceilings, and
-        (if --input is given) validate the fixture against the spec's input_schema.
+        (if given) validate --input against the spec's input_schema and --submission against
+        the declared submission.artifact_type (json/csv/onnx/wasm/torchscript/code/archive).
         No Docker required. This is the gate designers run before opening a registry PR.
 
     apex-dev run --spec ./spec.yaml --input fixtures/input.json --submission <path>
@@ -29,7 +31,8 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from apex_sdk.spec import LoadedSpec, SpecError, _parse_mem_to_mi, load_spec
+from apex_sdk.dev.artifacts import ArtifactError, check_artifact, materialize
+from apex_sdk.spec import LoadedSpec, SpecError, _parse_mem_to_mi, load_spec, submission_advisories
 
 
 def _load(spec_path: str, env: str) -> LoadedSpec:
@@ -63,11 +66,28 @@ def _validate_input(spec: LoadedSpec, input_path: str) -> None:
     print(f"✓ input fixture valid against input_schema ({p})")
 
 
+def _validate_artifact(spec: LoadedSpec, submission_path: str) -> None:
+    """Check a local artifact against the spec's submission block (exit 2 on mismatch)."""
+    try:
+        check_artifact(submission_path, spec)
+    except ArtifactError as e:
+        raise _die(f"submission artifact rejected:\n{e}", 2)
+    print(f"✓ submission valid for artifact_type: {spec.artifact_type} ({submission_path})")
+
+
+def _print_advisories(spec: LoadedSpec) -> None:
+    for note in submission_advisories(spec.raw):
+        print(f"⚠ {note}")
+
+
 def cmd_preflight(args: argparse.Namespace) -> None:
     spec = _load(args.spec, args.env)
     print(f"✓ spec valid: {spec.id} v{spec.version} (kind={spec.kind}, env={args.env})")
+    _print_advisories(spec)
     if args.input:
         _validate_input(spec, args.input)
+    if args.submission:
+        _validate_artifact(spec, args.submission)
     print("✓ preflight passed")
 
 
@@ -129,7 +149,7 @@ def _run_solo(spec: LoadedSpec, args: argparse.Namespace) -> None:
     if not args.submission:
         raise _die("--submission is required for a solo run (the miner artifact to evaluate).", 2)
     submission_src = Path(args.submission)
-    if not submission_src.is_file():
+    if not submission_src.exists():
         raise _die(f"--submission not found: {submission_src}", 2)
 
     has_dockerfile = bool(args.dockerfile)
@@ -137,6 +157,7 @@ def _run_solo(spec: LoadedSpec, args: argparse.Namespace) -> None:
     if has_dockerfile == has_image:
         raise _die("provide exactly one of --dockerfile or --image.", 2)
 
+    _validate_artifact(spec, args.submission)
     _require_docker()
     image = _build_image(args.dockerfile, args.context, spec) if has_dockerfile else args.image
 
@@ -156,8 +177,8 @@ def _run_solo(spec: LoadedSpec, args: argparse.Namespace) -> None:
         # bind-mounted /data writable so it can write result.json on Linux hosts too.
         data_dir.chmod(0o777)
         (data_dir / "input.json").write_bytes(Path(args.input).read_bytes())
-        submission_host = tmpdir / "submission_artifact"
-        submission_host.write_bytes(submission_src.read_bytes())
+        # Lay the artifact out as the platform would: a file, or an extracted tree for archives.
+        submission_host = materialize(submission_src, spec, tmpdir)
         result_path = data_dir / "result.json"
 
         name = f"apex-dev-{spec.id}-{uuid.uuid4().hex[:8]}"
@@ -180,7 +201,8 @@ def _run_solo(spec: LoadedSpec, args: argparse.Namespace) -> None:
         run_args += [image, *command]
 
         print(f"• running eval: image={image} network={'none' if network_disabled else 'default'} timeout={timeout_s}s")
-        print(f"  submission -> {target_path}, input -> /data/input.json")
+        kind = "extracted tree" if spec.is_archive_submission else "file"
+        print(f"  submission ({kind}) -> {target_path}, input -> /data/input.json")
         try:
             rc, _ = _docker(run_args, timeout=timeout_s)
         except subprocess.TimeoutExpired:
@@ -221,8 +243,9 @@ def cmd_run(args: argparse.Namespace) -> None:
     # Every competition is now referee-driven: the miner submission runs in an isolated player
     # sandbox and the competition-owned referee sandbox scores it (a solo eval is a 1-player
     # duel). For solo we still validate the player args so mistakes surface as exit 2.
+    _print_advisories(spec)
     if not spec.is_duel:
-        _validate_solo_args(args)
+        _validate_solo_args(spec, args)
     _print_plan(spec, args.env)
     print(
         "\n⚠ Referee-driven local run (player + referee sandboxes on a shared network) is not\n"
@@ -233,14 +256,24 @@ def cmd_run(args: argparse.Namespace) -> None:
     raise SystemExit(3)
 
 
-def _validate_solo_args(args: argparse.Namespace) -> None:
+def _validate_solo_args(spec: LoadedSpec, args: argparse.Namespace) -> None:
     """Validate the player-run args for a solo spec (exit 2 on error)."""
     if not args.submission:
         raise _die("--submission is required for a solo run (the miner artifact to evaluate).", 2)
-    if not Path(args.submission).is_file():
+    src = Path(args.submission)
+    if not src.exists():
         raise _die(f"--submission not found: {args.submission}", 2)
+    if src.is_dir() and not spec.is_archive_submission:
+        raise _die(
+            f"--submission {args.submission} is a directory, but artifact_type: "
+            f"{spec.artifact_type} expects a single file.",
+            2,
+        )
+    if not src.is_dir() and not src.is_file():
+        raise _die(f"--submission is neither a file nor a directory: {args.submission}", 2)
     if bool(args.dockerfile) == bool(args.image):
         raise _die("provide exactly one of --dockerfile or --image.", 2)
+    _validate_artifact(spec, args.submission)
 
 
 def _print_plan(spec: LoadedSpec, env: str) -> None:
@@ -251,7 +284,15 @@ def _print_plan(spec: LoadedSpec, env: str) -> None:
     if not spec.is_duel and spec.num_player_sandboxes > 1:
         print(f"  player sandboxes: {spec.num_player_sandboxes} (isolated copies of the same submission)")
     print(f"  player image   : {s['image']['ref']}@{s['image']['digest']}")
-    print(f"  submission     : {s['submission']['artifact_type']} -> {s['submission']['target_path']}")
+    sub = s["submission"]
+    dest = f"{sub['target_path']}/ (extracted)" if spec.is_archive_submission else sub["target_path"]
+    print(f"  submission     : {sub['artifact_type']} -> {dest}")
+    if spec.is_archive_submission:
+        a = sub["archive"]
+        print(
+            f"  bundle         : {a['format']}, entry={a['entry_file']}, "
+            f"<={a['max_files']} files, <={a['max_uncompressed_mb']}MB extracted"
+        )
     print(
         f"  resources      : cpu={s['resources']['cpu_limit']} mem={s['resources']['mem_limit']} "
         f"gpu={s['resources']['gpu_count']} (env={env})"
@@ -274,16 +315,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="apex-dev", description="Local dev harness for Apex competitions.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    pf = sub.add_parser("preflight", help="validate a spec (+ optional input fixture); no Docker")
+    pf = sub.add_parser("preflight", help="validate a spec (+ optional input fixture and submission); no Docker")
     pf.add_argument("--spec", required=True, help="path to spec.yaml")
     pf.add_argument("--input", help="path to an input fixture JSON to validate against input_schema")
+    pf.add_argument(
+        "--submission",
+        help="path to a sample artifact to check against submission.artifact_type "
+        "(a directory is accepted for artifact_type: archive)",
+    )
     pf.add_argument("--env", default="stage", choices=["stage", "prod"], help="resource-ceiling env (default: stage)")
     pf.set_defaults(func=cmd_preflight)
 
     run = sub.add_parser("run", help="run a solo spec's eval locally in Docker")
     run.add_argument("--spec", required=True, help="path to spec.yaml")
     run.add_argument("--input", required=True, help="path to the round input fixture JSON")
-    run.add_argument("--submission", help="path to the miner artifact to evaluate (required for solo)")
+    run.add_argument(
+        "--submission",
+        help="path to the miner artifact to evaluate (required for solo); a directory is accepted "
+        "for artifact_type: archive and is laid out as the extracted submission tree",
+    )
     run.add_argument("--dockerfile", help="build the player image from this Dockerfile (build context = --context)")
     run.add_argument("--context", help="docker build context for --dockerfile (default: the Dockerfile's directory)")
     run.add_argument("--image", help="use this prebuilt local image tag instead of building")

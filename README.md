@@ -119,14 +119,18 @@ stdlib-only so it costs you no dependencies.
 ```bash
 pip install -e .          # or: uv pip install -e .
 
-apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
+apex-dev preflight --spec ./spec.yaml --input fixtures/input.json \
+                   --submission ./fixtures/reference_solution.json
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
              --submission ./player/submission.py --dockerfile ./player/Dockerfile
 ```
 
 `preflight` checks the schema, the resource ceilings (stage 2 CPU / 2Gi, prod 4 CPU / 4Gi), and
 your fixture against `input_schema`. A spec that passes is one the platform will accept at sync
-time. No Docker needed.
+time. No Docker needed. Optional `--submission` also checks a sample artifact against your declared
+`submission.artifact_type` — `json`, `csv`, `onnx`, `wasm`, `torchscript`, `code`, or `archive` (a
+tarball/zip of several files, extracted into `target_path`); see
+[`docs/authoring.md`](docs/authoring.md#submission-artifact-types).
 
 `run` prints the resolved execution plan and **exits 3** — referee-driven local execution isn't
 implemented yet. Run the two sandboxes by hand meanwhile; the
