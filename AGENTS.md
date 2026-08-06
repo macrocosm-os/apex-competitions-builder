@@ -27,7 +27,8 @@ Two steps, in order.
 **1. Load the skill.** If your harness supports skills, invoke `apex-competition-builder`.
 Otherwise read `SKILL.md` top to bottom before designing anything — it encodes doctrine you will
 get wrong by intuition (the 1% takeover rule driving most design decisions, the
-constrained-submission-format ladder, anti-Goodhart gates, evaluation sizing).
+constrained-submission-format ladder, anti-Goodhart gates, scoring built from the start so no
+unintended pathway to a high score exists — and never documented, evaluation sizing).
 
 ```
 skills/apex-competition-builder/SKILL.md              # start here, read it fully

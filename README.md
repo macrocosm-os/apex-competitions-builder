@@ -27,7 +27,7 @@ The implementation details stay inside the skill:
 
 | What the agent works through | Covers |
 |------|-----------|
-| [`SKILL.md`](skills/apex-competition-builder/SKILL.md) | The shape of the competition: submission format, solo vs duel, the metric and its anti-gaming gates. |
+| [`SKILL.md`](skills/apex-competition-builder/SKILL.md) | The shape of the competition: submission format, solo vs duel, the metric, and scoring designed so the only pathway to a high score is solving the problem. |
 | [`reference/evaluation-design.md`](skills/apex-competition-builder/reference/evaluation-design.md) | How many tasks per evaluation, seeds, timeouts, resources, round length and reveal delay. |
 | [`reference/security-checklist.md`](skills/apex-competition-builder/reference/security-checklist.md) | Whether miners can game it. Walked end to end before you ship. |
 | [`HANDOFF.md`](skills/apex-competition-builder/HANDOFF.md) | The onboarding manifest, filled in and submitted at the end. |
