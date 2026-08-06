@@ -57,3 +57,13 @@ def test_skill_builds_scoring_defenses_in_and_keeps_them_undocumented() -> None:
     handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
     assert "Defense hygiene" in handoff
     assert "Profitable failure" in handoff
+
+
+def test_skill_requires_a_record_of_every_load_bearing_decision() -> None:
+    skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "every load-bearing decision" in skill
+    assert "/data/trace.jsonl" in skill
+    assert "/data/history/" in skill
+
+    handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "Evaluation records" in handoff

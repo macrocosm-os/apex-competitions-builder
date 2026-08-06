@@ -45,6 +45,7 @@ divergence):
 | `input_schema` + input fixtures | `<paths>` | ☐ |
 | Baseline submission (scores > 0 through the full player+referee loop) | `<path>` | ☐ |
 | Adversarial submission set (each scores ≤ your zero floor through the full loop) | `<path>` | ☐ |
+| Per-task evaluation records (`/data/trace.jsonl` or `/data/history/`) + the tool that reads them | `<paths>`, ~`<MB>`/round | ☐ |
 | Miner-facing README | `<path>` | ☐ |
 | Evidence of a full end-to-end run (local two-image run or stage round) | `<attach output>` | ☐ |
 
@@ -148,6 +149,12 @@ exhaustive here — including the pathways you chose not to close, and why.
 17. **Diagnostics payload.** What goes in `result.json` metadata / artifact
     files revealed at round completion, and why does none of it correlate
     with hidden ground truth?
+18. **Evaluation records.** Which channel carries each task's record
+    (`result.json` metadata, `/data/trace.jsonl`, `/data/history/`, player
+    stdout), and can a task's raw score be reconstructed from it — conditions,
+    player calls and faults, gates that fired, terminal reason, arithmetic?
+    Confirm no seed or generator input appears in any of them, that a failed
+    record write leaves the score unchanged, and give the per-round size.
 
 ## 6. GPU justification (only if `process_type: gpu`)
 
