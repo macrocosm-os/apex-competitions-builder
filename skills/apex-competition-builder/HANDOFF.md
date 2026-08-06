@@ -44,6 +44,7 @@ divergence):
 | Cosign identity + issuer (as declared in the spec `signature` block) | `<workflow url>` | ☐ |
 | `input_schema` + input fixtures | `<paths>` | ☐ |
 | Baseline submission (scores > 0 through the full player+referee loop) | `<path>` | ☐ |
+| Adversarial submission set (each scores ≤ your zero floor through the full loop) | `<path>` | ☐ |
 | Miner-facing README | `<path>` | ☐ |
 | Evidence of a full end-to-end run (local two-image run or stage round) | `<attach output>` | ☐ |
 
@@ -88,6 +89,11 @@ Written evidence, not intent — run the procedure in
 
 ## 5. Threat-model questionnaire (all answers required, "n/a" must say why)
 
+This is the **only** place your defenses are written down: they live in the
+scoring logic (SKILL.md design step 5) and are never named or explained in
+comments, docstrings, metadata keys, error text, or the miner README. Be
+exhaustive here — including the pathways you chose not to close, and why.
+
 1. **Miner-visible surface.** List every field the round input carries, plus
    everything else that enters the player sandbox (env, config, observation
    stream). For each: why is it safe in an adversary's hands?
@@ -101,27 +107,45 @@ Written evidence, not intent — run the procedure in
    verbatim — what happens? (It must not take or hold the lead.)
 5. **Metric gaming.** You spent a day adversarially probing your own metric
    (security-checklist §8). What did you find, and what gate now covers it?
-6. **Copy-plus-epsilon.** After the reveal delay, a miner copies the leader
-   and perturbs it trivially. Does your metric/threshold make that a losing
-   strategy?
-7. **Cross-round leakage.** Does observing one full round (tasks, own
-   diagnostics, the referee's query stream — miners log every request your
-   referee makes) let a miner hard-code answers for later rounds? How fast
-   does the pool/sampling rotate relative to that?
-8. **Error-message hygiene.** What do your failure reasons / error texts
-   reveal? (They are visible during the active round.)
-9. **Referee state.** Is your referee deterministic and stateless across
-   games/matches? Any caches, temp files, or logs keyed on
-   submission-controlled values?
-10. **Code execution.** If `artifact_type: code`: why could the format not
+6. **Malicious responses.** What does your referee do with a player response
+   that is the wrong type, NaN/Inf, oversized, wrongly shaped, invalidly
+   encoded, or out of range? Where is it validated, and what score results?
+7. **Profitable failure.** What raw score is paid by a submission that
+   induces a referee exception, stalls to every deadline, goes unhealthy
+   mid-match, or returns nothing? Show each pays less than an honest bad
+   answer, and that no exception, timeout, or forfeit branch yields partial
+   or default credit.
+8. **Aggregation integrity.** Fixed instance count? Do missing instances
+   score zero rather than drop out of the denominator? Are per-instance
+   contributions clamped and all terms bounded? Can one instance carry a
+   whole evaluation?
+9. **Adversarial submission results.** For each submission in the §2
+   adversarial set, its raw score through the full player+referee loop,
+   against your zero floor and your baseline.
+10. **Defense hygiene.** Confirm no comment, docstring, log line, error
+    string, `result.json` metadata key, or miner-README section names or
+    explains any of the defenses above.
+11. **Copy-plus-epsilon.** After the reveal delay, a miner copies the leader
+    and perturbs it trivially. Does your metric/threshold make that a losing
+    strategy?
+12. **Cross-round leakage.** Does observing one full round (tasks, own
+    diagnostics, the referee's query stream — miners log every request your
+    referee makes) let a miner hard-code answers for later rounds? How fast
+    does the pool/sampling rotate relative to that?
+13. **Error-message hygiene.** What do your failure reasons / error texts
+    reveal? (They are visible during the active round.)
+14. **Referee state.** Is your referee deterministic and stateless across
+    games/matches? Any caches, temp files, or logs keyed on
+    submission-controlled values?
+15. **Code execution.** If `artifact_type: code`: why could the format not
     be constrained to `onnx`/`torchscript`? Which `screening` extras does
     your spec add to the base forbidden sets? If artifacts: can the format
     smuggle code (TorchScript-style), and what structural checks block it?
-11. **Player-image hygiene.** The player image is miner-reachable and may be
+16. **Player-image hygiene.** The player image is miner-reachable and may be
     public (repo/image visibility is your choice) — treat its contents as
     exposable and confirm it contains no ground truth, judge configuration, or
     held-out data. Secret checks belong in the referee or the Layer-2 screen image.
-12. **Diagnostics payload.** What goes in `result.json` metadata / artifact
+17. **Diagnostics payload.** What goes in `result.json` metadata / artifact
     files revealed at round completion, and why does none of it correlate
     with hidden ground truth?
 

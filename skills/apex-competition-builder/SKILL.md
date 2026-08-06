@@ -44,7 +44,7 @@ A competition is a **declarative, versioned, signed spec** (`apex.competition.v1
 | 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: an image-driven command that writes the round's tasks to a file at round start. Omit it if the platform-injected per-round seed is enough. |
 | 5 | **Layer-2 screen image** (optional) | `entrypoints.screen`: bespoke behavioural checks in their **own** image (exit 0 = pass), so secret checks stay isolated from the player image even if the player image is made public. Aim to not need one — see design step 2. |
 
-Plus, alongside those: an `input_schema` (JSON Schema, emitted from a pydantic model) with input fixtures, a **working baseline submission** (must score > 0; it seeds the leaderboard and is your integration test), and a miner-facing README that lets miners iterate locally without leaking ground truth.
+Plus, alongside those: an `input_schema` (JSON Schema, emitted from a pydantic model) with input fixtures, a **working baseline submission** (must score > 0; it seeds the leaderboard and is your integration test), an **adversarial submission set** that must *not* score (design step 5), and a miner-facing README that lets miners iterate locally without leaking ground truth.
 
 There is **no partner-side normalizer**: your referee returns `raw_score` and the platform derives leaderboard placement from it, against the baselines you declare in the spec's `defaults`.
 
@@ -78,7 +78,7 @@ Then make alignment with it checkable:
 - Each round or so, pull the top submissions and ask: do they embody the goal, or just the metric? Track secondary diagnostics that are **not** used for ranking — divergence between them and the leaderboard is your early-warning signal that miners are winning wrong.
 - When score and goal drift apart, treat it as a metric bug: adjust gates or the metric between rounds (bump your spec `version`) and announce the change in the miner README. Every production competition that got surprised by miners "winning wrong" was missing this loop at launch.
 
-The goal statement is a required section of `HANDOFF.md` and drives everything downstream: the submission format (§2), the metric and its anti-Goodhart gates (§4), what you reveal to miners, and the operating parameters (§6).
+The goal statement is a required section of `HANDOFF.md` and drives everything downstream: the submission format (§2), the metric and its anti-Goodhart gates (§4), the unintended scoring pathways you have to close (§5), what you reveal to miners, and the operating parameters (§7).
 
 ### 2. Pick the most constrained submission format that can express a winning solution
 
@@ -100,9 +100,30 @@ You need a single scalar `raw_score` where "1% better" is meaningful and monoton
 
 - Higher-is-better or lower-is-better (both supported; declare `lower_is_better` in the spec's `defaults`).
 - The raw range, and the `baseline_raw_score` you declare in `defaults`: run your reference solution; a submission must beat `max(baseline, current_top) × 1.01` to take the lead (or `× 0.99` if lower-is-better).
-- **Anti-Goodhart gates**: secondary checks in your referee that zero out degenerate solutions that game the metric without solving the problem (validity/coherence judges, efficiency or minimal-intervention penalties, NaN/Inf guards, output sanity constraints). Derive them from your success statement (§1): every way a submission could score without embodying the goal is a gate you need. Production competitions that skipped these regretted it.
+- **Anti-Goodhart gates**: secondary checks in your referee that zero out degenerate solutions that game the metric without solving the problem (validity/coherence judges, efficiency or minimal-intervention penalties, NaN/Inf guards, output sanity constraints). Derive them from your success statement (§1): every way a submission could score without embodying the goal is a gate you need. Production competitions that skipped these regretted it. Metric gaming is only the polite half of the problem — §5 covers the rest, and both belong in the metric from the first version of it.
 
-### 5. Size the evaluation for statistical significance
+### 5. Design the scoring so the only pathway to a high score is the one you intended
+
+Assume every submission is a rational adversary that wants the top of the leaderboard and is indifferent to your problem. Emissions are winner-takes-all and continuous, so the moment a cheaper route to a high score exists it is the dominant strategy — and production competitions have had miners find those routes within days. §4 defines the intended route; this step is where you enumerate the unintended ones and make them score nothing **in the scoring itself**. This is part of building the competition, not a hardening pass afterwards: closing a pathway later means a new spec `version` re-reviewed and re-activated while miners are already earning through the hole, so the exploit pays for as long as your fix takes.
+
+Enumerate before you implement. For your task, write down every way a submission could place high without doing the work:
+
+- **Attack the referee instead of the task.** Everything a player returns is attacker-controlled input to your scorer: wrong types, NaN/Inf, enormous or deeply-nested payloads, invalid unicode, out-of-range indices, responses shaped to make your scoring code raise, hang, or fall into a default branch.
+- **Fail profitably.** Crashing your referee, stalling until a timeout, going unhealthy mid-match, or returning nothing must never pay more than an honest bad answer. Every "benefit of the doubt" path — partial credit for completed instances, a neutral score for a missing output, a retry after an exception, an unscored forfeit — becomes the strategy the moment it beats trying.
+- **Exploit the aggregation.** Banking easy instances and timing out on hard ones, blowing up one instance's contribution to carry the mean, riding an unbounded or divide-by-small term, or making instances drop out of the denominator instead of scoring zero.
+- **Reach the answer without solving.** Reconstructing ground truth from anything inside the sandbox, memoizing across calls or phases, replaying the referee's own query stream back at it, or copying the leader with a trivial perturbation once the reveal delay passes.
+- **Degenerate solutions the metric happens to like** — the Goodhart cases from §4, plus constant, empty, and random submissions.
+
+Then close each one structurally, so the defense is a property of how score is computed rather than a check bolted on top:
+
+- Score only from what your referee observed, graded against ground truth only it holds. Treat every player response as untrusted input: validate type, shape, and range at the boundary, and make anything that fails validation a **scoreable low outcome you compute deliberately** — never an exception, never a default that carries credit.
+- Make the intended path the only path that produces score. All instances are required and a missing one scores zero (never dropped from the denominator); per-instance contributions are clamped; every term is bounded and monotone; timeouts, forfeits, and malformed responses resolve to explicit low scores.
+- Do the arithmetic before launch: what does a submission that returns nothing score? One that stalls to the deadline? One that kills the match? If any of them lands near the top of the distribution, the metric is wrong, not the miner.
+- Ship an **adversarial submission set** alongside your baseline — empty, constant, random, malformed-response, deadline-stalling, exception-inducing, plus your own best-guess exploit. Keep them in your repo's tests; every one must score at or below your zero floor before you onboard.
+
+**Do not describe any of this in anything a miner can read.** No "prevents cheating" comments in the referee, no anti-exploit notes in docstrings, no section in the miner README, no `anti_cheat_penalty` field in `result.json` metadata, nothing in error text beyond what was wrong with the submission. Written down, a defense is a map: it names the boundary to route around and, by omission, what you did not think of. Express these as ordinary rules of the game in domain terms — "an action scores only if it is well-formed and arrives within the deadline" is a rule; `# stop miners crashing the referee for credit` is an invitation. The one place you *do* write them down is `HANDOFF.md` §5, which reaches Macrocosmos through the private onboarding channel.
+
+### 6. Size the evaluation for statistical significance
 
 If scores jump around when a submission sees new data, miners will resubmit identical solutions fishing for a lucky draw. Two defenses, use both:
 
@@ -111,7 +132,7 @@ If scores jump around when a submission sees new data, miners will resubmit iden
 
 Full sizing procedure, wall-time guidance, and the variance-vs-cost trade-off: `reference/evaluation-design.md`.
 
-### 6. Set the operating parameters deliberately
+### 7. Set the operating parameters deliberately
 
 Round length, reveal delay, and submission fee are behavior knobs, not paperwork — they shape what miners do as much as the metric does. The first two travel in your spec's `defaults` (`round_length_in_days`, `submission_reveal_days`); the fee and incentive weight are platform-side and negotiated at onboarding:
 
@@ -121,16 +142,17 @@ Round length, reveal delay, and submission fee are behavior knobs, not paperwork
 
 Pick the corner that matches your success statement (§1). Defaults, production evidence, and the full trade-off analysis: `reference/evaluation-design.md` § Operating parameters.
 
-### 7. Budget resources like they're your money
+### 8. Budget resources like they're your money
 
 `resources` in the spec sets per-sandbox `cpu_limit`, `mem_limit`, `gpu_count`, capped by per-environment ceilings (stage: 2 CPU / 2Gi; prod: 4 CPU / 4Gi; memory floor 256Mi). Most competitions ship near 1 CPU / 1.5Gi. Justify every increase. GPUs are platform-gated (`gpu_count` must be 0 unless `process_type: gpu` is approved) and belong on the scoring side, almost never in the player sandbox — only 1 of 9 production competitions ever needed GPU. Tight per-move deadlines (`deadline_ms` in the gym_v1 `act` call, 0.5–5 s in production) are a feature: they force miners to submit optimized solutions and keep total evaluation time bounded. Details: `reference/evaluation-design.md`.
 
-### 8. Walk the exploit checklist
+### 9. Walk the exploit checklist
 
 Miners are adversarial, well-resourced, and patient. Before finalizing the design, go through `reference/security-checklist.md` end to end. The headline rules:
 
 - **Nothing that enters the player sandbox is secret.** The round input, seeds, file paths, environment — assume the miner reads all of it. Never send a seed that can regenerate hidden data, an answer key, or validation criteria into the player sandbox. Ground truth lives only in your referee (and screen) images.
 - **Reveal generously, but only after the round ends.** Per-task breakdowns, logs, and artifacts are hidden while a round is active and exposed once it completes. Rich post-round diagnostics make miners iterate faster (good for you); just never include anything that stays secret across rounds.
+- **Everything a player sends the referee is untrusted input.** Validate it at the boundary and score the failure (§5); a submission must never be able to reach a high score, a default credit, or a referee crash by what it returns.
 - **No internet, no persistence, no shared state.** Sandboxes get no egress (enforced by the platform regardless of your spec), per-job isolated mounts, and files deleted after eval. Players talk only to the referee, never to each other or the outside world.
 
 ## The runtime contract (what your images must implement)
@@ -152,7 +174,7 @@ repo**. In *your* competition repo the vendored package is top-level — drop th
 **Referee image** — runs at `/app/referee.py` by convention; the platform injects `MATCH_ID`, `SEED`, `CONFIG_JSON`, `PLAYER_URLS`, `NUM_PLAYERS` and reads `/data/result.json`. For `gym_v1`, subclass the toolkit's `Referee` and implement `play_game(ctx, players) -> GameResult` (`raw_scores`, `winner`, `terminal_reason`, `steps`, plus metadata). Contract rules that matter operationally:
 
 - **A referee crash (or missing/invalid `result.json`) is scored as a referee failure, not the submission's** — never write a zeroed result to paper over a bug; let it fail so it's attributed correctly.
-- **Typed failures, never silent zeros.** An invalid submission should produce a scoreable, explained outcome the miner can act on. A valid submission that simply performs badly gets a low score, not an error.
+- **Typed failures, never silent zeros.** An invalid submission should produce a scoreable, explained outcome the miner can act on. A valid submission that simply performs badly gets a low score, not an error. Hostile responses — wrong types, NaN, oversized payloads, deadline overruns — are part of that contract: your referee validates and scores them, and never lets one become an exception path, a dropped instance, or default credit.
 - **Deterministic**: same (submission, round input, seed) → same score. Pin model revisions by full SHA, dataset files by content hash, dependency versions exactly. Score drift between versions is indistinguishable from cheating and will be treated as an incident.
 - Budget `referee.timeout_s` and `evaluate.timeout_s` explicitly; the sandbox is killed without grace at the limit.
 
@@ -183,6 +205,7 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] Kind chosen: `solo` by default; `duel` only with a written case that quality is inherently relative (plus fair-match, tiebreak, and forfeit design).
 - [ ] Submission format chosen from the constrained-format ladder above; Layer-2 screening need justified or eliminated.
 - [ ] Metric + baselines (`defaults.baseline_raw_score`) + anti-Goodhart gates defined.
+- [ ] Unintended scoring pathways enumerated and closed inside the scoring (design step 5): player responses validated at the boundary, no profitable failure/timeout/crash path, bounded per-instance contributions, missing instances score zero. Adversarial submission set written and scoring at or below the zero floor. None of it named or explained in comments, docstrings, metadata field names, error text, or the miner README — disclosure lives in `HANDOFF.md` §5 only.
 - [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds).
 - [ ] Security checklist passed (`reference/security-checklist.md`).
 - [ ] `spec.yaml` written from the toolkit example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.

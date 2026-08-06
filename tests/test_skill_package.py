@@ -42,3 +42,18 @@ def test_skill_keeps_competition_work_outside_the_toolkit() -> None:
     assert "player/gym_v1/" in text
     assert "referee/gym_v1/" in text
     assert "do not guess a package from PyPI" in text
+
+
+def test_skill_builds_scoring_defenses_in_and_keeps_them_undocumented() -> None:
+    skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "the only pathway to a high score is the one you intended" in skill
+    assert "Do not describe any of this in anything a miner can read." in skill
+    assert "adversarial submission set" in skill.lower()
+
+    checklist = (SKILL_ROOT / "reference" / "security-checklist.md").read_text(encoding="utf-8")
+    assert "Malicious input into the scoring path" in checklist
+    assert "Say none of it out loud." in checklist
+
+    handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "Defense hygiene" in handoff
+    assert "Profitable failure" in handoff
