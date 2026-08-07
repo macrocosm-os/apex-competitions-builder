@@ -33,6 +33,8 @@ Rules of thumb for where N lands by archetype:
 
 Your evaluation cost is multiplied by submission volume for the lifetime of the competition — for example, a 20-minute evaluation at 200 submissions/day is 66 machine-hours/day, forever. Rounds run 1–2 days, and the per-submission fee (set per competition in USD, paid in TAO) does the economic anti-spam work — active miners settle at a few submissions per day in practice.
 
+Budget the evaluation records too (SKILL.md design step 6). They cost almost no wall time — a copy per step — but they are the one output whose size scales with N and with episode length, so estimate the per-round bytes at your chosen N, expose a stride/sampling knob and an off switch in the round config, and write each task's record as it ends rather than buffering the suite.
+
 Wall-time guidance: aim for a **median evaluation of 1–10 minutes**; treat **20 minutes as the hard ceiling**. Miners iterate against your feedback loop — a 2-minute eval gets you an order of magnitude more iteration than a 20-minute one.
 
 ## Operating parameters: round length, reveal delay, submission fee
