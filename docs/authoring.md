@@ -103,6 +103,36 @@ reads `/data/result.json`. A referee crash (or missing/invalid result.json) is s
 failed game attributed to the **referee**, not the submissions — so never write a zeroed
 result to cover up a bug; let it fail.
 
+### Result metadata and the dashboard
+
+`result.json.metadata` is yours: any JSON object. The platform never rejects a result over
+its metadata. Two conventions unlock platform features:
+
+**`player_stats`** — a list of one dict per player, in `PLAYER_URLS` order. For duels the
+platform reads the booleans `won`, `killed_opponent` and `self_death` from each entry to
+compute per-game outcomes and the match tiebreak.
+
+**Envelope enrichment (solo competitions)** — to control how your evaluation renders on the
+Apex dashboard, emit a `StandardEvalMetadata`-shaped dict:
+
+```json
+{
+  "schema_version": 1,
+  "summary": [{"key": "hit_rate", "label": "Hit rate", "value": 0.75, "format": "percent"}],
+  "units": [{"id": "task-1", "type": "task", "index": 1, "label": "Task 1", "outcome": "hit"}],
+  "metrics": [{"key": "task_score", "label": "Task score", "value": 1.0, "unit_id": "task-1"}],
+  "capabilities": {"outcome_breakdown": true, "score_distribution": true},
+  "details": {"anything": "you want"}
+}
+```
+
+If it validates, the platform adopts your `summary`/`units`/`metrics`/`capabilities`/
+`details` — but always overrides `score`/`raw_score` with the scores it computed from
+`raw_scores`. If it doesn't validate (or you skip all of this), your metadata lands verbatim
+under the platform envelope's `details` and the dashboard shows a platform-composed summary
+instead. Duel per-game metadata is preserved under the match's
+`details["Game N"]["referee"]`.
+
 ## 4. Test locally
 
 ```bash
