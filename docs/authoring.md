@@ -103,6 +103,53 @@ reads `/data/result.json`. A referee crash (or missing/invalid result.json) is s
 failed game attributed to the **referee**, not the submissions — so never write a zeroed
 result to cover up a bug; let it fail.
 
+**Round generator** (optional) — `entrypoints.generate_round` is one command, run **once per round**
+at round start, that produces the round's tasks. Omit it if the platform's per-round seed is enough;
+most competitions do, and derive every task from `SEED` inside the referee instead.
+
+It runs in your **player** image (the digest `image` names, not the referee's), so the command has to
+exist there. The sandbox is airgapped and credential-free, and gets no network unless Macrocosmos
+grants it per competition at onboarding — ask before writing a generator that fetches anything. It
+also runs on platform-side resource defaults (~1 CPU / 1.5 GiB), *not* your spec's `resources` block;
+heavier generation is negotiated at onboarding. `timeout_s` is the hard kill-timer for the whole
+command.
+
+**Input.** The platform writes `/data/input.json` before the command starts:
+
+```json
+{
+  "competition_id": 42,
+  "competition_pkg": "my_competition",
+  "round_number": 7,
+  "generator_args": { "seed": 1234567 }
+}
+```
+
+`generator_args.seed` is the round's master seed (`generator_args` also carries any operator-set
+knobs agreed at onboarding). **Derive every random choice from that seed.** The platform writes the
+same seed into the round input your referee later receives, so a round can be reproduced exactly by
+pinning it — a generator that reaches for unseeded randomness silently makes that impossible.
+
+**Output.** Write the absolute path your spec declares as `output_file`, which must sit under `/data`
+(the shared mount; nothing else written in the container survives it):
+
+```json
+{ "tasks": [ ... ], "sandbox_data": { ... } }
+```
+
+Only those two keys are read.
+
+- `tasks` becomes the round input the platform persists and hands your referee as `CONFIG_JSON` —
+  shaped `{"tasks": [...], "seed": <the same seed>}`. It is **miner-visible**, so nothing in it may
+  narrow a later round (`reference/security-checklist.md` §1 and §3).
+- `sandbox_data` is an audit-only payload (baseline metrics and the like) that the platform stores on
+  the round and never exposes to miners. Keep it small — per-task detail belongs in your referee's
+  evaluation records, not here.
+
+Exiting non-zero, or leaving `output_file` unwritten, fails round generation: the platform retries
+the round rather than inventing an input for it. There is no partial success — write the file last,
+once you have every task.
+
 ## 4. Test locally
 
 ```bash
