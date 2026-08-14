@@ -101,6 +101,17 @@ def test_skill_keeps_wall_clock_time_out_of_the_score() -> None:
     assert "wall-clock time or host throughput" in handoff
 
 
+def test_skill_treats_a_zero_baseline_floor_as_the_norm() -> None:
+    skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "Don't be afraid to declare a baseline of 0." in skill
+
+    sizing = (SKILL_ROOT / "reference" / "evaluation-design.md").read_text(encoding="utf-8")
+    assert "The baseline floor" in sizing
+
+    handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "If `baseline_raw_score` is **not** 0" in handoff
+
+
 def test_skill_requires_a_record_of_every_load_bearing_decision() -> None:
     skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
     assert "every load-bearing decision" in skill

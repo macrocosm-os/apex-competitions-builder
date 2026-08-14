@@ -73,6 +73,21 @@ The reveal is the platform's engine for compounding improvement: after `submissi
 
 These three interact: short rounds + short reveal + low fee maximizes iteration speed and noise; long rounds + long reveal + higher fee selects for fewer, deeper attempts. Pick the corner that matches what "success" looks like for your competition (SKILL.md design step 1), not a default posture.
 
+## The baseline floor: 0 is the norm, not a cop-out
+
+`defaults.baseline_raw_score` is the score a submission must beat (by the 1% margin) before there is any leader at all. Two different things get called "the baseline" and only one of them is this number:
+
+- **Your reference solution** — a real submission you wrote, which must score > 0 through the full loop. It's your integration test and the thing you measure σ_round with. Always required.
+- **The declared floor** — the number in the spec. It does *not* have to be your reference solution's score.
+
+**Every production competition declares 0** (or, for lower-is-better, a bound loose enough that any valid submission clears it), which makes the first submission that scores the effective baseline. Setting 0 follows the existing precedent rather than creating a new one, and it lets the leaderboard start from wherever the field actually is.
+
+Set a positive floor only when scoring below some level is genuinely worthless rather than merely unimpressive — and price the downside first:
+
+- Too high and nothing takes the lead: no leader means the round's emissions burn while miners who are improving see no reward, which is the fastest way to lose a new competition's field.
+- It's sticky: the floor is in the spec, so correcting it means a new `version`, re-signed, re-reviewed, re-activated. The `max(baseline, current_top)` rule means a floor set above the real frontier keeps hurting until that lands.
+- Your anti-exploit work does not depend on it. Degenerate submissions are stopped by the gates and the zero floor in your scoring (SKILL.md design step 5), not by the declared baseline — a high floor is not a substitute for a metric that pays nothing for garbage.
+
 ## Timeouts
 
 Size these from the worst case a submission can force, then check that the evaluation you designed actually fits inside them (SKILL.md design step 9). The budget:
