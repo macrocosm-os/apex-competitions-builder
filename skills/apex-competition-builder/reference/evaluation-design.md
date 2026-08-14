@@ -75,6 +75,20 @@ These three interact: short rounds + short reveal + low fee maximizes iteration 
 
 ## Timeouts
 
+Size these from the worst case a submission can force, then check that the evaluation you designed actually fits inside them (SKILL.md design step 9). The budget:
+
+```
+referee.timeout_s  ≥  2 × ( player startup/readiness
+                          + N × calls_per_task × deadline_ms
+                          + your scoring work
+                          + record writes )
+evaluate.timeout_s ≥  the player's share of the same span, including startup
+```
+
+`calls_per_task × deadline_ms` — not the baseline's measured time — is the honest per-task figure, because a submission that stalls every call to the deadline is legal, costs the miner nothing, and will appear. The schema caps both timers at 7200 s; the practical ceiling is what Macrocosmos agrees at onboarding, against a target median of 1–10 minutes. If the arithmetic doesn't fit, reduce `deadline_ms` or N, or reduce per-task work — raising the timeout to absorb a worst case you can't afford just moves the failure to the round scheduler.
+
+**When it can't be made to fit**, that is a finding to surface, not to absorb: record the numbers in `HANDOFF.md` §3 (timeout row) and §4, and state it in the onboarding issue's evaluation-time-budget field so the ceiling is negotiated before activation. A referee killed at its limit writes no `result.json` at all, so the failure is attributed to the referee, applies to every submission equally, and blocks the round behind it — an unflagged over-budget evaluation looks exactly like a broken competition.
+
 - **Whole-evaluation hard timeouts** (`evaluate.timeout_s` for the player, `referee.timeout_s` for the scorer): startup + N × per-instance budget + buffer. The sandbox is killed without grace at the limit; a player timeout should be a scoreable outcome your referee reports (score 0, or partial credit for completed instances) with a reason the miner can see. If you allow partial credit, check what it pays before shipping it: unfinished instances must score zero and stay in the denominator, or timing out on the hard ones becomes the winning strategy (security-checklist §9).
 - **Per-move deadlines** (`deadline_ms` in the gym_v1 `act` call): 0.5–5 s per move/route/call in production. Tight per-call limits are a design tool, not just protection: they force miners to optimize latency, which is usually part of what you actually want, and they bound worst-case evaluation time by construction.
 - **Startup budget**: separate from the run budget — the platform polls your player's `readiness_path` before the referee starts driving it. A player that never becomes healthy is a typed failure attributed to the submission, not a hang.

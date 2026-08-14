@@ -3,8 +3,8 @@
 Fill this document completely and submit it with your [**Competition onboarding
 issue**](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)
 on the toolkit repo (`macrocosm-os/apex-competitions-builder`) — the form has a field for
-it, alongside a description of the competition, your repo URL, released tag,
-and image refs + digests. Macrocosmos reviews it, copies your `spec.yaml`
+it, alongside a description of the competition, your evaluation time budget
+against the timeouts, your repo URL, released tag, and image refs + digests. Macrocosmos reviews it, copies your `spec.yaml`
 into the private registry, and activates it on stage — where your baseline
 runs a staging round — before going live. Incomplete sections are the most
 common cause of a delayed launch.
@@ -72,7 +72,7 @@ onboarding.
 | `defaults.lower_is_better` | spec | true / false | — |
 | `defaults.baseline_raw_score` / `baseline_score` | spec | `<values>` | measured, not guessed |
 | `resources` (per sandbox) | spec | `<cpu_limit, mem_limit, gpu_count>` | ~1 CPU / 1.5Gi (ceilings: stage 2 CPU / 2Gi, prod 4 CPU / 4Gi) |
-| `evaluate.timeout_s` / `referee.timeout_s` | spec | `<seconds>` | median eval 1–10 min |
+| `evaluate.timeout_s` / `referee.timeout_s` | spec | `<seconds>` | median eval 1–10 min, 20 min hard ceiling (schema max 7200 s) |
 | Per-move deadline (`deadline_ms`, gym_v1) | referee config | `<ms>` / n/a | 0.5–5 s |
 | Submission fee | platform | `<USD>` | ≈$1 (the anti-spam mechanism; final: Macrocosmos) |
 | Incentive weight | platform | `<proposal>` | 0.02–0.05 (final: Macrocosmos) |
@@ -102,7 +102,19 @@ evidence that the rotation bites:
 - Typical top score and the resulting takeover margin (1%): `<value>`
 - Check: σ_round ≤ ¼ × margin? `<yes/no + arithmetic>`
 - Reference solutions rank consistently across all seeds? `<yes/no>`
-- Total evaluation wall time at N: `<seconds>` (fits the spec timeouts above?)
+- Total evaluation wall time at N, baseline: `<seconds>`
+
+**Timeout budget.** Sized from the worst case a submission can force, not the
+baseline (SKILL.md design step 9). A referee killed at its limit writes no
+result, is attributed to you, and stalls the round.
+
+- Worst case = startup + N × calls_per_task × `deadline_ms` + scoring +
+  record writes: `<seconds>` (show the arithmetic)
+- `referee.timeout_s` = `<seconds>`; `evaluate.timeout_s` = `<seconds>`
+- Headroom (target ≈2× worst case): `<factor>`
+- **Does the evaluation fit?** `<yes / NO — and if no, state the shortfall in
+  seconds and what you need here and in the onboarding issue; do not ship it
+  unflagged>`
 
 ## 5. Threat-model questionnaire (all answers required, "n/a" must say why)
 
