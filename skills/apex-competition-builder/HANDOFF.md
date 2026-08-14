@@ -165,7 +165,11 @@ exhaustive here — including the pathways you chose not to close, and why.
     reveal? (They are visible during the active round.)
 14. **Referee state.** Is your referee deterministic and stateless across
     games/matches? Any caches, temp files, or logs keyed on
-    submission-controlled values?
+    submission-controlled values? Does any *scored* term depend on
+    wall-clock time or host throughput — elapsed seconds, latency,
+    throughput, a speed bonus? (Deadlines and timeouts may use wall clock;
+    the score may not. If speed counts, name the host-independent unit it is
+    counted in.)
 15. **Code execution.** If `artifact_type: code`: why could the format not
     be constrained to `onnx`/`torchscript`? Which `screening` extras does
     your spec add to the base forbidden sets? If artifacts: can the format
