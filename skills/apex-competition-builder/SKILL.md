@@ -41,7 +41,7 @@ A competition is a **declarative, versioned, signed spec** (`apex.competition.v1
 | 1 | **`spec.yaml`** | The competition itself: kind (`solo`/`duel`), resources, submission contract, screening config, round defaults, entrypoints, images, cosign identity. Copy [hello-world's `spec.yaml`](https://github.com/macrocosm-os/apex-competition-hello-world/blob/main/spec.yaml) and edit. |
 | 2 | **Player image** | Runs the miner's submission as an isolated HTTP server (`gym_v1` or `custom` protocol) that the referee drives. **Vendor the toolkit's `gym_v1/` into your repo and build on `FROM python:3.12-slim`** — do **not** use `FROM apex-player-base` (not usable yet; see *Getting the toolkit into your images* below). Digest-pinned, cosign-signed. |
 | 3 | **Referee image** | Competition-owned scorer. Holds ALL domain logic: game rules, datasets, ground truth, scoring. Drives the player(s) over the per-job network and writes `/data/result.json`. Required for both solo and duel. |
-| 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: a command run once per round, in your **player** image, that reads `/data/input.json` and writes `{tasks, sandbox_data}` to its declared `output_file`. Derive everything from the master seed the platform passes in `generator_args.seed`, or the round stops being reproducible. Omit it if the platform-injected per-round seed is enough. Full contract: the [authoring guide](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/docs/authoring.md). |
+| 4 | **Round generator** (optional) | `entrypoints.generate_round` in your spec: a command run once per round, in your **player** image, that reads `/data/input.json` and writes `{tasks, sandbox_data}` to its declared `output_file`. Derive everything from the master seed the platform passes in `generator_args.seed`, or the round stops being reproducible — and vary the round's *conditions*, not just its instances (design step 7). Omit it if the platform-injected per-round seed is enough. Full contract: the [authoring guide](https://github.com/macrocosm-os/apex-competitions-builder/blob/main/docs/authoring.md). |
 | 5 | **Layer-2 screen image** (optional) | `entrypoints.screen`: bespoke behavioural checks in their **own** image (exit 0 = pass), so secret checks stay isolated from the player image even if the player image is made public. Aim to not need one — see design step 2. |
 
 Plus, alongside those: an `input_schema` (JSON Schema, emitted from a pydantic model) with input fixtures, a **working baseline submission** (must score > 0; it seeds the leaderboard and is your integration test), an **adversarial submission set** that must *not* score (design step 5), the **per-task evaluation records** your referee writes plus a tool that reads them back (design step 6), and a miner-facing README that lets miners iterate locally without leaking ground truth.
@@ -147,16 +147,28 @@ What separates a record worth having from dead weight:
 - **Version the format and ship a reader.** Put a `format: "<name>/<major>"` field in every record, bump the major when a reader can no longer ignore a change, and provide a tool in your repo that reads both downloaded artifacts and local runs — one format, one reader, or miners won't use what you produce.
 - **Assert it in CI**, or it will quietly stop working: one record per task, the numbers inside them equal to the ones in `result.json` metadata, and an unwritable artifact path leaving the score unchanged.
 
-### 7. Size the evaluation for statistical significance
+### 7. Make each round test something the last one didn't
+
+A round-based competition only earns its structure if the rounds differ. If every round draws the same tasks under the same conditions, rounds are a clock rather than an experiment: the leaderboard stops measuring whether a solution works and starts measuring how thoroughly it has been fitted to one frozen set. A production competition shipped its first version this way — the same obstacle course and the same 24 friction coefficients every round — so the top submission was the one best tuned to those 24 numbers, and nothing in the score said whether the policy was robust.
+
+Rounds are the instrument that makes solutions generalize. Design the variation before the tasks:
+
+- **Name the axes your success statement (§1) implies.** The conditions a deployed solution would actually face and have to survive — layout, physical constants, input distribution, traffic or workload mix, noise level, opponent style, difficulty. Those are what a round varies. If you can't name an axis along which a winner should still win, you have a benchmark, not a competition.
+- **Rotate conditions, not just instances.** Fresh draws from one narrow distribution are still the same test. Resample the conditions themselves each round, and derive every one of them from the master seed — `generate_round` gets `round_number` alongside `generator_args.seed`, so make the round's conditions a reproducible function of both rather than a constant baked into your image.
+- **Hold difficulty stationary while conditions move.** The 1% takeover rule compares a new score against a top score earned on a *different* round's tasks, so a round that lands easier hands out an unearned lead and a harder one punishes honest miners. Keep the mix fixed — the same proportions of easy/hard strata, the same instance count — and rotate the draws inside it. Verify with your baseline: its score should be flat across rounds, and a flat baseline is also what makes the sizing measurement in §8 mean anything.
+- **Keep part of the space unseen.** Reserve regions of the condition space that no launch round draws from. They are how you find out later whether the leader generalized or memorized, and they cost nothing to hold back.
+- **Prove the rotation bites.** Score your baseline and a deliberately over-fitted reference (tuned hard to one round's conditions) across several rounds' conditions. If the over-fitted reference keeps pace everywhere, your rounds aren't varying anything that matters — go back to the axes.
+
+### 8. Size the evaluation for statistical significance
 
 If scores jump around when a submission sees new data, miners will resubmit identical solutions fishing for a lucky draw. Two defenses, use both:
 
-- **Fix all randomness per round.** All tasks derive from one master seed per round — the platform injects `SEED` into your referee, and your optional `generate_round` entrypoint runs once per round, not per submission. Identical resubmissions then score identically — seed-fishing yields nothing.
+- **Fix all randomness per round.** All tasks derive from one master seed per round — the platform injects `SEED` into your referee, and your optional `generate_round` entrypoint runs once per round, not per submission. Identical resubmissions then score identically — seed-fishing yields nothing. Fixed *within* a round, rotated *between* rounds along the axes from §7.
 - **Evaluate enough independent task instances** that the standard error of the mean is well below the 1% takeover threshold. As a rule of thumb: **100–400 instances per evaluation** for CPU tasks, and on the order of **150 samples from a large held-out pool** for GPU/LLM tasks.
 
 Full sizing procedure, wall-time guidance, and the variance-vs-cost trade-off: `reference/evaluation-design.md`.
 
-### 8. Set the operating parameters deliberately
+### 9. Set the operating parameters deliberately
 
 Round length, reveal delay, and submission fee are behavior knobs, not paperwork — they shape what miners do as much as the metric does. The first two travel in your spec's `defaults` (`round_length_in_days`, `submission_reveal_days`); the fee and incentive weight are platform-side and negotiated at onboarding:
 
@@ -166,11 +178,11 @@ Round length, reveal delay, and submission fee are behavior knobs, not paperwork
 
 Pick the corner that matches your success statement (§1). Defaults, production evidence, and the full trade-off analysis: `reference/evaluation-design.md` § Operating parameters.
 
-### 9. Budget resources like they're your money
+### 10. Budget resources like they're your money
 
 `resources` in the spec sets per-sandbox `cpu_limit`, `mem_limit`, `gpu_count`, capped by per-environment ceilings (stage: 2 CPU / 2Gi; prod: 4 CPU / 4Gi; memory floor 256Mi). Most competitions ship near 1 CPU / 1.5Gi. Justify every increase. GPUs are platform-gated (`gpu_count` must be 0 unless `process_type: gpu` is approved) and belong on the scoring side, almost never in the player sandbox — only 1 of 9 production competitions ever needed GPU. Tight per-move deadlines (`deadline_ms` in the gym_v1 `act` call, 0.5–5 s in production) are a feature: they force miners to submit optimized solutions and keep total evaluation time bounded. Details: `reference/evaluation-design.md`.
 
-### 10. Walk the exploit checklist
+### 11. Walk the exploit checklist
 
 Miners are adversarial, well-resourced, and patient. Before finalizing the design, go through `reference/security-checklist.md` end to end. The headline rules:
 
@@ -232,7 +244,8 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] Metric + baselines (`defaults.baseline_raw_score`) + anti-Goodhart gates defined.
 - [ ] Unintended scoring pathways enumerated and closed inside the scoring (design step 5): player responses validated at the boundary, no profitable failure/timeout/crash path, bounded per-instance contributions, missing instances score zero. Adversarial submission set written and scoring at or below the zero floor. None of it named or explained in comments, docstrings, metadata field names, error text, or the miner README — disclosure lives in `HANDOFF.md` §5 only.
 - [ ] Every task of an evaluation leaves a record (design step 6): per-task rows in `result.json` metadata plus `/data/trace.jsonl` or `/data/history/` files, carrying conditions, player calls and faults, gates that fired, terminal reason, and the per-task score. Writes best-effort and score-neutral, size budgeted, format versioned, reader tool in the repo, asserted in CI.
-- [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds).
+- [ ] Round variation designed (design step 7): named axes of variation tied to the success statement, conditions derived per round from the master seed, difficulty distribution stationary, part of the condition space held out, and an over-fitted reference shown not to keep pace with the baseline across rounds.
+- [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds, each drawing different round conditions).
 - [ ] Security checklist passed (`reference/security-checklist.md`).
 - [ ] `spec.yaml` written from the toolkit example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
 - [ ] Player + referee images implemented with the toolkit's `gym_v1/` **vendored** into the repo (`FROM python:3.12-slim`, top-level `gym_v1` imports), not `FROM apex-*-base`; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
