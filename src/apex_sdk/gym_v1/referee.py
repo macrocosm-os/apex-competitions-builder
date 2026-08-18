@@ -41,7 +41,24 @@ TRACE_PATH = Path("/data/trace.jsonl")
 
 @dataclass
 class GameResult:
-    """The result of one game. Serialized verbatim to /data/result.json."""
+    """The result of one game. Serialized verbatim to /data/result.json.
+
+    ``metadata`` is free-form. Two platform conventions apply:
+
+    - ``metadata["player_stats"]``: optional list of one dict per player, in
+      PLAYER_URLS order. For duels the platform reads ``won`` /
+      ``killed_opponent`` / ``self_death`` (booleans) off each entry to build
+      the per-game outcome and the match tiebreak tuple.
+    - Solo referees may emit a full ``StandardEvalMetadata`` envelope (a dict
+      with ``schema_version: 1`` plus ``summary`` / ``units`` / ``metrics`` /
+      ``capabilities`` / ``details``) to control how the evaluation renders on
+      the dashboard. If it validates, the platform adopts it — but always
+      overrides ``score`` / ``raw_score`` with the platform-computed values.
+      Anything that isn't a valid envelope is nested verbatim under the
+      platform envelope's ``details``; nothing is ever lost or rejected.
+      For duel games, ``metadata`` is preserved under the match's
+      ``details["Game N"]["referee"]``.
+    """
 
     raw_scores: list[float]
     winner: int
