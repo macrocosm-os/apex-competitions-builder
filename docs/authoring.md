@@ -136,6 +136,9 @@ instead. Duel per-game metadata is preserved under the match's
 ## 4. Test locally
 
 ```bash
+# 0. Cheap triage before asking for admission review. No Docker or GitHub access.
+apex-dev screen --repo .
+
 # 1. Validate spec + input fixture. No Docker.
 apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
 
@@ -151,6 +154,10 @@ will accept at sync time. `apex-dev run` validates the args and prints the resol
 (player + referee images, protocol, resources); **referee-driven local execution (spinning up the
 player + referee sandboxes on a shared network) is not implemented yet** and exits 3 — run on
 stage to execute. A local 2-sandbox harness is a follow-up.
+
+`apex-dev screen` is only a cheap first pass. It catches missing onboarding artifacts, placeholder
+image digests, obvious perfect baselines, and empty or duplicated task fixtures. It does not execute
+candidate code or make an admission decision; a passing screen still requires the internal review.
 
 ## 5. Ship it
 

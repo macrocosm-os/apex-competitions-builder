@@ -30,6 +30,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 from apex_sdk.spec import LoadedSpec, SpecError, _parse_mem_to_mi, load_spec
+from apex_sdk.dev.screen import screen_package
 
 
 def _load(spec_path: str, env: str) -> LoadedSpec:
@@ -69,6 +70,17 @@ def cmd_preflight(args: argparse.Namespace) -> None:
     if args.input:
         _validate_input(spec, args.input)
     print("✓ preflight passed")
+
+
+def cmd_screen(args: argparse.Namespace) -> None:
+    findings = screen_package(args.repo, args.spec, args.input)
+    if not findings:
+        print("✓ light screen passed; no obvious onboarding blockers found")
+        return
+    print("⚠ light screen found potential onboarding blockers:")
+    for finding in findings:
+        print(f"  [{finding.severity}] {finding.code}: {finding.message}")
+    raise SystemExit(1)
 
 
 def _die(msg: str, code: int = 1) -> "SystemExit":
@@ -279,6 +291,12 @@ def build_parser() -> argparse.ArgumentParser:
     pf.add_argument("--input", help="path to an input fixture JSON to validate against input_schema")
     pf.add_argument("--env", default="stage", choices=["stage", "prod"], help="resource-ceiling env (default: stage)")
     pf.set_defaults(func=cmd_preflight)
+
+    screen = sub.add_parser("screen", help="run cheap local onboarding triage checks; no Docker or GitHub access")
+    screen.add_argument("--repo", default=".", help="competition repository root (default: current directory)")
+    screen.add_argument("--spec", help="path to spec.yaml (default: <repo>/spec.yaml)")
+    screen.add_argument("--input", help="path to input fixture (default: <repo>/fixtures/input.json)")
+    screen.set_defaults(func=cmd_screen)
 
     run = sub.add_parser("run", help="run a solo spec's eval locally in Docker")
     run.add_argument("--spec", required=True, help="path to spec.yaml")
