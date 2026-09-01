@@ -168,7 +168,20 @@ If scores jump around when a submission sees new data, miners will resubmit iden
 
 Full sizing procedure, wall-time guidance, and the variance-vs-cost trade-off: `reference/evaluation-design.md`.
 
-### 9. Set the operating parameters deliberately
+Then check the size you chose against the clock, because N is bounded by the timeouts as hard as it is by variance — see the next step.
+
+### 9. Fit the evaluation inside the timeouts before you commit to N
+
+Two hard kill-timers bound every evaluation: `evaluate.timeout_s` for the player sandbox and `referee.timeout_s` for your scorer. You set both in the spec (the schema caps them at 7200 s; the practical ceiling is what Macrocosmos agrees at onboarding, and the wall-time target is a 1–10 minute median with 20 minutes as the hard ceiling). At the limit the sandbox is killed **without grace** — no `result.json`, no partial credit, nothing to attribute. A referee timeout is a **referee failure charged to you, not the submission**: the evaluation is unscored, the round's pipeline stalls behind it, and repeats are an incident.
+
+So budget the worst case, not the median, and do the arithmetic before you fix N:
+
+- **The worst case is chosen by miners, not by your baseline.** A submission that stalls every call until the deadline is legal, cheap, and will exist. Your true upper bound is `startup/readiness + N × calls_per_task × deadline_ms + your scoring work + record writes`, and `referee.timeout_s` has to cover all of it with margin. If that number doesn't fit, the fix is a tighter `deadline_ms` or a smaller N — not a bigger timeout.
+- **Size the two timers against different things.** `evaluate.timeout_s` covers the player's whole lifetime including startup; `referee.timeout_s` covers the match *plus* your scoring and artifact writing. Sizing the referee from the player's budget is how designers get killed mid-scoring, with the work done and no result written.
+- **Leave headroom for a slower host.** Evaluation runs on shared compute that can be throttled, so a run that fits in 95% of the budget on your laptop will not fit somewhere. Aim for the measured worst case at roughly half the timeout.
+- **If it doesn't fit, say so — loudly and early.** Some tasks genuinely need more time than the envelope allows. That is a negotiation with Macrocosmos before activation, not something to discover as a stalled round: put the numbers in `HANDOFF.md` §3 (the timeout row) and §4, and state it in the onboarding issue's evaluation-time-budget field. An unflagged evaluation that doesn't fit fails as *your* referee, silently, on every submission.
+
+### 10. Set the operating parameters deliberately
 
 Round length, reveal delay, and submission fee are behavior knobs, not paperwork — they shape what miners do as much as the metric does. The first two travel in your spec's `defaults` (`round_length_in_days`, `submission_reveal_days`); the fee and incentive weight are platform-side and negotiated at onboarding:
 
@@ -178,11 +191,11 @@ Round length, reveal delay, and submission fee are behavior knobs, not paperwork
 
 Pick the corner that matches your success statement (§1). Defaults, production evidence, and the full trade-off analysis: `reference/evaluation-design.md` § Operating parameters.
 
-### 10. Budget resources like they're your money
+### 11. Budget resources like they're your money
 
 `resources` in the spec sets per-sandbox `cpu_limit`, `mem_limit`, `gpu_count`, capped by per-environment ceilings (stage: 2 CPU / 2Gi; prod: 4 CPU / 4Gi; memory floor 256Mi). Most competitions ship near 1 CPU / 1.5Gi. Justify every increase. GPUs are platform-gated (`gpu_count` must be 0 unless `process_type: gpu` is approved) and belong on the scoring side, almost never in the player sandbox — only 1 of 9 production competitions ever needed GPU. Tight per-move deadlines (`deadline_ms` in the gym_v1 `act` call, 0.5–5 s in production) are a feature: they force miners to submit optimized solutions and keep total evaluation time bounded. Details: `reference/evaluation-design.md`.
 
-### 11. Walk the exploit checklist
+### 12. Walk the exploit checklist
 
 Miners are adversarial, well-resourced, and patient. Before finalizing the design, go through `reference/security-checklist.md` end to end. The headline rules:
 
@@ -213,7 +226,7 @@ repo**. In *your* competition repo the vendored package is top-level — drop th
 - **Typed failures, never silent zeros.** An invalid submission should produce a scoreable, explained outcome the miner can act on. A valid submission that simply performs badly gets a low score, not an error. Hostile responses — wrong types, NaN, oversized payloads, deadline overruns — are part of that contract: your referee validates and scores them, and never lets one become an exception path, a dropped instance, or default credit.
 - **Leave a record of every load-bearing decision** (§6): per-task rows in `metadata`, plus a per-step event stream via `self.trace(event)` → `/data/trace.jsonl` or one file per task under `/data/history/`. The platform collects both, ships them to S3, and lists them on the submission once the round completes. Write them best-effort — a failed artifact write must never fail a scored game.
 - **Deterministic**: same (submission, round input, seed) → same score. Pin model revisions by full SHA, dataset files by content hash, dependency versions exactly. Score drift between versions is indistinguishable from cheating and will be treated as an incident.
-- Budget `referee.timeout_s` and `evaluate.timeout_s` explicitly; the sandbox is killed without grace at the limit.
+- Budget `referee.timeout_s` and `evaluate.timeout_s` explicitly against the worst case a miner can force, not your baseline's median (design step 9); the sandbox is killed without grace at the limit, and a referee that runs past it is a referee failure charged to you that stalls the round.
 
 **Custom protocol** — if `http_api.protocol: custom`, your player serves whatever HTTP API your referee speaks (not `/reset`,`/act`) and your referee drives it directly, so you don't use gym_v1's `Player`/`serve`/`PlayerClient`. You still cross the same platform boundary, though: parse the injected env with `RefereeContext.from_env()` and write `/data/result.json` as a `GameResult` — both are protocol-agnostic, so use them instead of hand-rolling the env parsing and result shape.
 
@@ -246,6 +259,7 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] Every task of an evaluation leaves a record (design step 6): per-task rows in `result.json` metadata plus `/data/trace.jsonl` or `/data/history/` files, carrying conditions, player calls and faults, gates that fired, terminal reason, and the per-task score. Writes best-effort and score-neutral, size budgeted, format versioned, reader tool in the repo, asserted in CI.
 - [ ] Round variation designed (design step 7): named axes of variation tied to the success statement, conditions derived per round from the master seed, difficulty distribution stationary, part of the condition space held out, and an over-fitted reference shown not to keep pace with the baseline across rounds.
 - [ ] Evaluation sized per `reference/evaluation-design.md` (variance measured with your baseline across ≥20 seeds, each drawing different round conditions).
+- [ ] Timeout budget worked out (design step 9): worst-case evaluation time — every call stalled to `deadline_ms` — plus scoring and record writes, fitting `referee.timeout_s` and `evaluate.timeout_s` with roughly 2× headroom. If it doesn't fit, that's stated in `HANDOFF.md` §3–4 and in the onboarding issue, with the numbers.
 - [ ] Security checklist passed (`reference/security-checklist.md`).
 - [ ] `spec.yaml` written from the toolkit example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
 - [ ] Player + referee images implemented with the toolkit's `gym_v1/` **vendored** into the repo (`FROM python:3.12-slim`, top-level `gym_v1` imports), not `FROM apex-*-base`; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
@@ -257,7 +271,7 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 Your repo and images can be **public or private** — your choice, per artifact (most production competitions run fully private). The platform verifies and mirrors your images **by digest** and can pull private packages, so visibility is a transparency decision, not a technical gate. The registry that activates them is always private (it's the control plane), so you don't PR it directly:
 
 1. Build + sign your image(s) with keyless cosign; push by digest; tag a release of your repo.
-2. **Request review by opening a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)** on the toolkit repo (`macrocosm-os/apex-competitions-builder`). This is the only way in — the registry is private, so there is nothing to PR. The form asks for a description of the competition and your success statement, your filled `HANDOFF.md` (the manifest in this skill: goal statement, ops proposal, evaluation-sizing evidence, threat-model questionnaire), your repo URL, released tag, and image refs + digests.
+2. **Request review by opening a [Competition onboarding issue](https://github.com/macrocosm-os/apex-competitions-builder/issues/new?template=competition-onboarding.yml)** on the toolkit repo (`macrocosm-os/apex-competitions-builder`). This is the only way in — the registry is private, so there is nothing to PR. The form asks for a description of the competition and your success statement, your filled `HANDOFF.md` (the manifest in this skill: goal statement, ops proposal, round-variation and evaluation-sizing evidence, threat-model questionnaire), your evaluation time budget against the timeouts (design step 9 — say so plainly if it doesn't fit), your repo URL, released tag, and image refs + digests.
 3. A Macrocosmos maintainer reviews (digest pinning, cosign identity, resource ceilings, the security checklist against your questionnaire answers), copies your `spec.yaml` verbatim into the private registry, and activates it on **stage first** — your baseline runs a staging round — then prod. Expect one round-trip of feedback on evaluation sizing and the reveal policy — those are the two things designers most often get wrong on the first pass.
 
 Updating a live competition is the same loop: bump `version` in your repo (the `(id, version)` pair is immutable once synced), re-sign, and request activation of the new version.

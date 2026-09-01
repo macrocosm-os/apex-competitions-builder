@@ -44,6 +44,23 @@ body:
     validations:
       required: true
 
+  - type: textarea
+    id: eval-time-budget
+    attributes:
+      label: Evaluation time budget vs. timeouts
+      description: >
+        The worst-case evaluation time (every call stalled to the per-move deadline, not your
+        baseline's median), the `evaluate.timeout_s` / `referee.timeout_s` you set, and whether
+        the evaluation fits them. **If it does not fit, say so here explicitly with the numbers**
+        — the ceiling is negotiable before activation, but an unflagged over-budget evaluation
+        fails as a referee timeout on every submission and stalls the round.
+      placeholder: |
+        Worst case: 20s startup + 150 tasks × 4 calls × 2s deadline + ~40s scoring ≈ 1260s.
+        referee.timeout_s = 2400, evaluate.timeout_s = 2400 → ~1.9x headroom. Fits.
+        Baseline median run: 310s.
+    validations:
+      required: true
+
   - type: input
     id: competition-id
     attributes:

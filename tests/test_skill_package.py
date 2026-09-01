@@ -71,6 +71,25 @@ def test_skill_requires_rounds_to_vary_their_conditions() -> None:
     assert "Round variation" in handoff
 
 
+def test_skill_budgets_evaluation_time_against_the_timeouts() -> None:
+    skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "Fit the evaluation inside the timeouts before you commit to N" in skill
+    assert "referee failure charged to you" in skill
+
+    sizing = (SKILL_ROOT / "reference" / "evaluation-design.md").read_text(encoding="utf-8")
+    assert "calls_per_task × deadline_ms" in sizing
+
+    handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "Timeout budget" in handoff
+    assert "Does the evaluation fit?" in handoff
+
+    template = yaml.safe_load(
+        (ROOT / ".github" / "ISSUE_TEMPLATE" / "competition-onboarding.yml").read_text(encoding="utf-8")
+    )
+    field = next(item for item in template["body"] if item.get("id") == "eval-time-budget")
+    assert field["validations"]["required"] is True
+
+
 def test_skill_requires_a_record_of_every_load_bearing_decision() -> None:
     skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
     assert "every load-bearing decision" in skill
