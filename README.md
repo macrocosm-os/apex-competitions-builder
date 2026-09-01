@@ -89,7 +89,7 @@ directory, while xAI accepts pinned-source pull requests to `xai-org/plugin-mark
 | [`src/apex_sdk/gym_v1/`](src/apex_sdk/gym_v1/) | The wire protocol: `Player`/`serve`, `Referee`/`GameResult`/`RefereeContext`, `PlayerClient`. **The directory you vendor.** Stdlib-only. |
 | [`src/apex_sdk/schema/apex.competition.v1.json`](src/apex_sdk/schema/apex.competition.v1.json) | The spec schema. The platform validates against this exact file. |
 | [`src/apex_sdk/spec.py`](src/apex_sdk/spec.py) | `load_spec`, `validate_dict`, `load_schema`, `check_resource_ceilings`. |
-| [`src/apex_sdk/dev/cli.py`](src/apex_sdk/dev/cli.py) | `apex-dev` — `preflight` and `run`. |
+| [`src/apex_sdk/dev/cli.py`](src/apex_sdk/dev/cli.py) | `apex-dev` — `screen`, `preflight`, and `run`. |
 | [`docs/authoring.md`](docs/authoring.md) | The authoring flow. Authoritative for mechanics. |
 | [`images/`](images/) | Base image Dockerfiles. **Unpublished — don't build FROM these**, see below. |
 
@@ -122,6 +122,7 @@ pip install -e .          # or: uv pip install -e .
 apex-dev preflight --spec ./spec.yaml --input fixtures/input.json
 apex-dev run --spec ./spec.yaml --input fixtures/input.json \
              --submission ./player/submission.py --dockerfile ./player/Dockerfile
+apex-dev screen --repo .
 ```
 
 `preflight` checks the schema, the resource ceilings (stage 2 CPU / 2Gi, prod 4 CPU / 4Gi), and
@@ -133,6 +134,13 @@ implemented yet. Run the two sandboxes by hand meanwhile; the
 [hello-world README](https://github.com/macrocosm-os/apex-competition-hello-world#validate-and-run-locally)
 has the exact commands. Other exit codes: `2` bad args, `4` no Docker, `5` timeout, `6` bad or
 missing `result.json`.
+
+`screen` is a fast, local triage pass before internal admission review. It checks the spec and
+input fixture, required onboarding files, real non-placeholder player/referee digests, obvious
+perfect baselines, and duplicate or empty task fixtures. It reads only YAML, JSON, and file
+metadata; it never executes competition code, contacts GitHub, adds labels, or rejects an issue.
+Exit `0` means no obvious blocker was found; exit `1` means follow-up is recommended. A passing
+screen is not approval — the private admission review still owns the final decision.
 
 ## The shape of a competition
 
