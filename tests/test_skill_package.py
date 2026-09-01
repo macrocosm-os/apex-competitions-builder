@@ -90,6 +90,17 @@ def test_skill_budgets_evaluation_time_against_the_timeouts() -> None:
     assert field["validations"]["required"] is True
 
 
+def test_skill_keeps_wall_clock_time_out_of_the_score() -> None:
+    skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "Nothing in the score may be measured in wall-clock time." in skill
+
+    checklist = (SKILL_ROOT / "reference" / "security-checklist.md").read_text(encoding="utf-8")
+    assert "Keep wall-clock time out of the score entirely" in checklist
+
+    handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "wall-clock time or host throughput" in handoff
+
+
 def test_skill_requires_a_record_of_every_load_bearing_decision() -> None:
     skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
     assert "every load-bearing decision" in skill
