@@ -59,6 +59,18 @@ def test_skill_builds_scoring_defenses_in_and_keeps_them_undocumented() -> None:
     assert "Profitable failure" in handoff
 
 
+def test_skill_requires_rounds_to_vary_their_conditions() -> None:
+    skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    assert "Make each round test something the last one didn't" in skill
+    assert "Rotate conditions, not just instances." in skill
+
+    sizing = (SKILL_ROOT / "reference" / "evaluation-design.md").read_text(encoding="utf-8")
+    assert "What has to change between rounds" in sizing
+
+    handoff = (SKILL_ROOT / "HANDOFF.md").read_text(encoding="utf-8")
+    assert "Round variation" in handoff
+
+
 def test_skill_requires_a_record_of_every_load_bearing_decision() -> None:
     skill = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
     assert "every load-bearing decision" in skill

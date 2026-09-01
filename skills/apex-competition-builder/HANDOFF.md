@@ -41,6 +41,7 @@ divergence):
 | Referee image | `<registry>/<image>@sha256:<digest>` | ☐ |
 | Layer-2 screen image — or written justification for why none is needed (§5) | `<image@digest>` / n/a | ☐ |
 | Round-generation entrypoint (`generate_round`) — or "platform seed is enough" | in spec / n/a | ☐ |
+| Over-fitted reference solution (used to prove rounds vary — §4) | `<path>` | ☐ |
 | Cosign identity + issuer (as declared in the spec `signature` block) | `<workflow url>` | ☐ |
 | `input_schema` + input fixtures | `<paths>` | ☐ |
 | Baseline submission (scores > 0 through the full player+referee loop) | `<path>` | ☐ |
@@ -76,13 +77,28 @@ onboarding.
 | Submission fee | platform | `<USD>` | ≈$1 (the anti-spam mechanism; final: Macrocosmos) |
 | Incentive weight | platform | `<proposal>` | 0.02–0.05 (final: Macrocosmos) |
 
-## 4. Evaluation-sizing justification (required paragraph)
+## 4. Round variation & evaluation sizing (required — evidence, not intent)
 
-Written evidence, not intent — run the procedure in
-`reference/evaluation-design.md` and report:
+**Round variation.** Rounds exist to make solutions generalize (SKILL.md
+design step 7); a round that repeats the last one's conditions measures
+fitting, not skill. State what moves, what deliberately doesn't, and the
+evidence that the rotation bites:
+
+- Axes of variation, and the property of §1 each one tests: `<...>`
+- How each is derived from the round's master seed / `round_number`: `<...>`
+- Held constant across rounds (and why): `<...>`
+- Difficulty stationarity: instance count and easy/hard stratum proportions
+  fixed? Baseline score across ≥5 condition sets: `<values + spread>`
+- Condition-space regions held out of live rounds: `<...>`
+- Over-fitted reference (tuned to one round's conditions) scored across
+  several rounds: `<scores>` — does it fall behind the baseline off its own
+  conditions? `<yes/no>`
+
+**Sizing.** Run the procedure in `reference/evaluation-design.md` and report:
 
 - Instances per evaluation (N): `<N>`
-- Measured σ_round across ≥20 master seeds with the baseline: `<value>` (attach the numbers)
+- Measured σ_round across ≥20 master seeds with the baseline, each seed
+  drawing the conditions it would draw live: `<value>` (attach the numbers)
 - Typical top score and the resulting takeover margin (1%): `<value>`
 - Check: σ_round ≤ ¼ × margin? `<yes/no + arithmetic>`
 - Reference solutions rank consistently across all seeds? `<yes/no>`
