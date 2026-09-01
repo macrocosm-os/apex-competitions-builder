@@ -44,7 +44,7 @@ divergence):
 | Over-fitted reference solution (used to prove rounds vary — §4) | `<path>` | ☐ |
 | Cosign identity + issuer (as declared in the spec `signature` block) | `<workflow url>` | ☐ |
 | `input_schema` + input fixtures | `<paths>` | ☐ |
-| Baseline submission (scores > 0 through the full player+referee loop) | `<path>` | ☐ |
+| Reference/baseline submission (scores > 0 through the full loop; separate from the declared `baseline_raw_score` floor, which is normally 0) | `<path>` | ☐ |
 | Adversarial submission set (each scores ≤ your zero floor through the full loop) | `<path>` | ☐ |
 | Per-task evaluation records (`/data/trace.jsonl` or `/data/history/`) + the tool that reads them | `<paths>`, ~`<MB>`/round | ☐ |
 | Miner-facing README | `<path>` | ☐ |
@@ -70,12 +70,17 @@ onboarding.
 | `defaults.round_length_in_days` | spec | `<days>` | 1–2 days |
 | `defaults.submission_reveal_days` | spec | `<days>` | 1–7 days |
 | `defaults.lower_is_better` | spec | true / false | — |
-| `defaults.baseline_raw_score` / `baseline_score` | spec | `<values>` | measured, not guessed |
+| `defaults.baseline_raw_score` / `baseline_score` | spec | `<values>` | 0 in every production competition (or the loose bound equivalent if lower-is-better); a non-zero floor needs a written reason below |
 | `resources` (per sandbox) | spec | `<cpu_limit, mem_limit, gpu_count>` | ~1 CPU / 1.5Gi (ceilings: stage 2 CPU / 2Gi, prod 4 CPU / 4Gi) |
 | `evaluate.timeout_s` / `referee.timeout_s` | spec | `<seconds>` | median eval 1–10 min, 20 min hard ceiling (schema max 7200 s) |
 | Per-move deadline (`deadline_ms`, gym_v1) | referee config | `<ms>` / n/a | 0.5–5 s |
 | Submission fee | platform | `<USD>` | ≈$1 (the anti-spam mechanism; final: Macrocosmos) |
 | Incentive weight | platform | `<proposal>` | 0.02–0.05 (final: Macrocosmos) |
+
+If `baseline_raw_score` is **not** 0 (or the lower-is-better equivalent), say
+why scoring below that level is worthless rather than merely unimpressive, and
+what happens to the competition if no submission clears it in the first
+rounds: `<reason or "n/a — declared 0">`
 
 ## 4. Round variation & evaluation sizing (required — evidence, not intent)
 
