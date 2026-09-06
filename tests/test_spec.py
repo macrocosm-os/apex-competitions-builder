@@ -242,6 +242,26 @@ def test_solo_spec_still_requires_image_and_referee():
         validate_dict(bad)
 
 
+def test_external_spec_rejects_parent_traversal_in_allowed_path_prefixes():
+    """`server/../` normalizes to the repo root: an allowlist entry containing `..` would open
+    every path the partner has, so the schema must reject it outright."""
+    bad = _minimal_external()
+    bad["external_evaluator"]["patch"]["allowed_path_prefixes"] = ["server/../"]
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+    bad["external_evaluator"]["patch"]["allowed_path_prefixes"] = ["server/../../etc/"]
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
+def test_external_spec_accepts_a_dotted_directory_prefix():
+    """Only `..` is banned — a single dot in a directory name stays legal."""
+    ok = _minimal_external()
+    ok["external_evaluator"]["patch"]["allowed_path_prefixes"] = ["server/v1.2/"]
+    validate_dict(ok)
+
+
 def test_solo_spec_rejects_external_evaluator_block():
     bad = _minimal_solo()
     bad["external_evaluator"] = _minimal_external()["external_evaluator"]
