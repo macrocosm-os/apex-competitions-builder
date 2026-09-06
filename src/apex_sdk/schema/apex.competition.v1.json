@@ -13,13 +13,9 @@
     "kind",
     "process_type",
     "resources",
-    "image",
     "submission",
     "input_schema",
-    "defaults",
-    "entrypoints",
-    "referee",
-    "signature"
+    "defaults"
   ],
   "properties": {
     "schema": {
@@ -42,8 +38,8 @@
       "maxLength": 128
     },
     "kind": {
-      "enum": ["solo", "duel"],
-      "description": "solo -> the miner submission runs in its own player sandbox(es) + a referee (a 1-player duel); one player sandbox by default, or N isolated sandboxes of the SAME submission via the optional `solo.player_sandboxes`. duel -> N player sandboxes of DIFFERENT submissions + a referee. Both isolate the miner submission (player) from the scorer (referee)."
+      "enum": ["solo", "duel", "external"],
+      "description": "solo -> the miner submission runs in its own player sandbox(es) + a referee (a 1-player duel); one player sandbox by default, or N isolated sandboxes of the SAME submission via the optional `solo.player_sandboxes`. duel -> N player sandboxes of DIFFERENT submissions + a referee. Both isolate the miner submission (player) from the scorer (referee). external -> no sandbox; evaluation is delegated to a partner API declared in external_evaluator (Platform-approved exception, not self-serve)."
     },
     "process_type": {
       "enum": ["cpu", "gpu"],
@@ -81,8 +77,8 @@
       "required": ["artifact_type", "max_size_mb", "target_path"],
       "properties": {
         "artifact_type": {
-          "enum": ["code", "torchscript", "onnx"],
-          "description": "How the platform writes the miner's submission. code=raw source bytes, torchscript=.pt bytes, onnx=.onnx bytes."
+          "enum": ["code", "torchscript", "onnx", "patch"],
+          "description": "How the platform writes the miner's submission. code=raw source bytes, torchscript=.pt bytes, onnx=.onnx bytes, patch=unified diff text (external kind only)."
         },
         "max_size_mb": {
           "type": "number",
@@ -267,9 +263,53 @@
         "cosign_identity": { "type": "string", "format": "uri" },
         "cosign_issuer": { "type": "string", "format": "uri" }
       }
+    },
+    "external_evaluator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "base_url", "routes", "patch", "credential_env"],
+      "description": "Required when kind is external. Declares the partner-hosted HTTPS API the platform delegates evaluation to — no sandbox images are involved.",
+      "properties": {
+        "provider": { "enum": ["urnetwork"] },
+        "base_url": { "type": "string", "pattern": "^https://[A-Za-z0-9.-]+(:[0-9]+)?$",
+                      "description": "Scheme+host(+port) only, no path. The ONLY host the platform adapter will contact." },
+        "routes": {
+          "type": "object", "additionalProperties": false,
+          "required": ["info", "submit", "leaderboard"],
+          "properties": {
+            "info": { "type": "string", "pattern": "^/" },
+            "submit": { "type": "string", "pattern": "^/" },
+            "leaderboard": { "type": "string", "pattern": "^/" }
+          }
+        },
+        "patch": {
+          "type": "object", "additionalProperties": false,
+          "required": ["max_size_bytes", "allowed_path_prefixes"],
+          "properties": {
+            "max_size_bytes": { "type": "integer", "minimum": 1, "maximum": 10485760 },
+            "allowed_path_prefixes": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^[a-z0-9_./-]+/$" } }
+          }
+        },
+        "credential_env": { "type": "string", "pattern": "^EXTERNAL_EVALUATOR_[A-Z0-9_]+$",
+                            "description": "Name of the platform env var holding the partner submitter token. Prefix is enforced so a spec can never name another secret." }
+      }
     }
   },
   "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "external" } } },
+      "then": {
+        "required": ["external_evaluator"],
+        "not": { "anyOf": [
+          { "required": ["image"] }, { "required": ["referee"] }, { "required": ["entrypoints"] },
+          { "required": ["signature"] }, { "required": ["duel"] }, { "required": ["solo"] }
+        ] }
+      },
+      "else": {
+        "required": ["image", "entrypoints", "referee", "signature"],
+        "not": { "required": ["external_evaluator"] }
+      }
+    },
     {
       "if": { "properties": { "kind": { "const": "duel" } } },
       "then": { "required": ["duel"], "not": { "required": ["solo"] } }

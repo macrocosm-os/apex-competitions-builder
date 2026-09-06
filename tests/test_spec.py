@@ -170,6 +170,85 @@ def _minimal_solo() -> dict:
     }
 
 
+def _minimal_external():
+    return {
+        "schema": "apex.competition.v1",
+        "id": "sim_latency",
+        "version": "1.0.0",
+        "display_name": "URnetwork sim-latency",
+        "kind": "external",
+        "process_type": "cpu",
+        "resources": {"cpu_limit": 1, "mem_limit": "256Mi", "gpu_count": 0},
+        "submission": {"artifact_type": "patch", "max_size_mb": 0.25, "target_path": "/dev/null"},
+        "input_schema": {"type": "object"},
+        "screening": {},
+        "defaults": {
+            "baseline_score": 100.0,
+            "baseline_raw_score": 0.0,
+            "round_length_in_days": 7,
+            "submission_reveal_days": 0,
+            "lower_is_better": False,
+        },
+        "external_evaluator": {
+            "provider": "urnetwork",
+            "base_url": "https://api.bringyour.com",
+            "routes": {
+                "info": "/competition/info",
+                "submit": "/competition/score",
+                "leaderboard": "/competition/leaderboard",
+            },
+            "patch": {"max_size_bytes": 262144, "allowed_path_prefixes": ["connect/", "sdk/", "server/", "proxy/"]},
+            "credential_env": "EXTERNAL_EVALUATOR_URNETWORK_TOKEN",
+        },
+    }
+
+
+def test_external_spec_is_valid_without_images():
+    validate_dict(_minimal_external())
+
+
+def test_external_spec_rejects_image_block():
+    bad = _minimal_external()
+    bad["image"] = {"ref": "ghcr.io/x/y", "digest": "sha256:" + "a" * 64}
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
+def test_external_spec_requires_external_evaluator_block():
+    bad = _minimal_external()
+    del bad["external_evaluator"]
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
+def test_external_spec_rejects_http_base_url():
+    bad = _minimal_external()
+    bad["external_evaluator"]["base_url"] = "http://api.bringyour.com"
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
+def test_external_spec_rejects_unprefixed_credential_env():
+    bad = _minimal_external()
+    bad["external_evaluator"]["credential_env"] = "DB_CONNECTION_STRING"
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
+def test_solo_spec_still_requires_image_and_referee():
+    bad = _minimal_solo()
+    del bad["image"]
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
+def test_solo_spec_rejects_external_evaluator_block():
+    bad = _minimal_solo()
+    bad["external_evaluator"] = _minimal_external()["external_evaluator"]
+    with pytest.raises(SpecError):
+        validate_dict(bad)
+
+
 def test_screening_block_optional_and_valid():
     # Layer-1 screening is optional (defaults apply) ...
     base = _minimal_solo()
