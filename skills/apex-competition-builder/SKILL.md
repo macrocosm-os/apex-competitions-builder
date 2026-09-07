@@ -94,6 +94,8 @@ Rule of thumb: if you're tempted to screen submissions for "dangerous code," fir
 
 `solo` — every submission scored independently by your referee against the round input, leadership via the 1% takeover rule — is the default (7 of 9 production competitions). Choose `duel` (head-to-head bracket; the round winner comes from the bracket, **not** the 1% rule) only when no meaningful absolute metric exists — when a solution's quality *is* how it plays against an adversary. Duels buy adversarial realism at a cost: fair mirrored matches (`duel.swap_sides` cancels first-mover advantage across games), deterministic tiebreaks, per-move deadlines, and forfeit handling (catch `PlayerError` in your referee and forfeit, don't crash) are all on you to design. Mechanically both kinds are the same two images — solo is a 1-player duel. A solo competition can still request several **isolated sandboxes of the same submission** via `solo.player_sandboxes` (the referee gets that many `PLAYER_URLS`) when distinct phases of one submission must not share memory or filesystem — e.g. compress in one sandbox, decompress in a separate one so a submission can't stash the input during compression and replay it during decompression.
 
+`external` is a Platform-approved exception for partner-hosted evaluators; it is not available through the self-serve onboarding issue.
+
 ### 4. Define the metric before the task
 
 You need a single scalar `raw_score` where "1% better" is meaningful and monotone in real-world value. Decide:
