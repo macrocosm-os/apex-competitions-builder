@@ -190,7 +190,7 @@ So budget the worst case, not the median, and do the arithmetic before you fix N
 Round length, reveal delay, and submission fee are behavior knobs, not paperwork — they shape what miners do as much as the metric does. The first two travel in your spec's `defaults` (`round_length_in_days`, `submission_reveal_days`); the fee and incentive weight are platform-side and negotiated at onboarding:
 
 - **Round length** (production: 1–2 days): shorter = faster miner turnaround and fresh seeds, but thinner competition per round; longer = deeper contests on identical tasks, but a lucky leader holds on longer.
-- **Reveal delay** (production: 1 day typical, 4–7 where solutions carry real IP): shorter = ideas propagate and the field improves fast, but breakthroughs are copied within a day so miners may withhold their best work; longer = deep R&D pays, but everyone iterates against a black-box leader.
+- **Reveal delay** (production default: **1 day**; 1–7 allowed, and 4–7 only where solutions carry real IP and you justify it in HANDOFF.md): shorter = ideas propagate and the field improves fast, but breakthroughs are copied within a day so miners may withhold their best work; longer = deep R&D pays, but everyone iterates against a black-box leader.
 - **Submission fee** (production: ≈$1, every active competition charges one): smaller = more participants and exploration, but spam, noise, and unbounded eval spend; larger = deliberate submissions and bounded cost, but a thinner field.
 
 Pick the corner that matches your success statement (§1). Defaults, production evidence, and the full trade-off analysis: `reference/evaluation-design.md` § Operating parameters.
@@ -268,7 +268,7 @@ apex-dev run --spec ./spec.yaml --input fixtures/input.json \
 - [ ] `spec.yaml` written from the toolkit example; `apex-dev preflight` passes; images digest-pinned and cosign-signed.
 - [ ] Player + referee images implemented with the toolkit's `gym_v1/` **vendored** into the repo (`FROM python:3.12-slim`, top-level `gym_v1` imports), not `FROM apex-*-base`; full loop exercised (locally by hand, then on stage); baseline submission scores > 0 end to end.
 - [ ] Miner README written — everything a miner needs to iterate locally (including how to run your player image against their own submission), nothing that leaks ground truth.
-- [ ] Ops parameters proposed with reasons tied to the success statement: `round_length_in_days` (production runs 1–2), `submission_reveal_days` (1–7), submission fee in USD (≈$1 in production), incentive weight (negotiated with Macrocosmos; active competitions run 0.02–0.05), and for duels `players_per_match` / `num_games_default` / `swap_sides`. Trade-offs: `reference/evaluation-design.md` § Operating parameters.
+- [ ] Ops parameters proposed with reasons tied to the success statement: `round_length_in_days` (production runs 1–2), `submission_reveal_days` (production default 1; range 1–7, and anything above 1 needs a reason), submission fee in USD (≈$1 in production), incentive weight (negotiated with Macrocosmos; active competitions run 0.02–0.05), and for duels `players_per_match` / `num_games_default` / `swap_sides`. Trade-offs: `reference/evaluation-design.md` § Operating parameters.
 
 ## Onboarding with Macrocosmos
 

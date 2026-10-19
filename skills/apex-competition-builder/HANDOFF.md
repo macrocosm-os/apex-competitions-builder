@@ -68,7 +68,7 @@ onboarding.
 | `kind` | spec | solo / duel | solo (7 of 9; duel needs a written case) |
 | `duel` block (duels only) | spec | `<players_per_match, num_games_default, swap_sides>` / n/a | 2 players, swap_sides: true |
 | `defaults.round_length_in_days` | spec | `<days>` | 1–2 days |
-| `defaults.submission_reveal_days` | spec | `<days>` | 1–7 days |
+| `defaults.submission_reveal_days` | spec | `<days>` | **1 day** (range 1–7; 4–7 only where solutions carry real IP, with a reason below) |
 | `defaults.lower_is_better` | spec | true / false | — |
 | `defaults.baseline_raw_score` / `baseline_score` | spec | `<values>` | 0 in every production competition (or the loose bound equivalent if lower-is-better); a non-zero floor needs a written reason below |
 | `resources` (per sandbox) | spec | `<cpu_limit, mem_limit, gpu_count>` | ~1 CPU / 1.5Gi (ceilings: stage 2 CPU / 2Gi, prod 4 CPU / 4Gi) |

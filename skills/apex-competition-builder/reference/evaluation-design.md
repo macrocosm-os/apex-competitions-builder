@@ -63,7 +63,7 @@ The reveal is the platform's engine for compounding improvement: after `submissi
 
 - *Shorter* → ideas propagate fast and the floor rises quickly across the field. But first-mover advantage shrinks — a genuine breakthrough only earns for a day before being copied, so sophisticated miners may withhold their best ideas or under-invest for fear of losing their IP the moment it works.
 - *Longer* → deep work pays: an innovator holds an uncopyable lead for the window, which justifies real R&D. But the rest of the field iterates against a black-box leader (disengagement risk), and collective progress steps instead of flows.
-- Production practice: 1 day where iteration is cheap and incremental; 4–7 days where a winning solution embodies real IP (trained policies, interactive strategies). Match the delay to how expensive a genuine improvement is to produce — the more R&D a leap costs, the longer it should stay protected.
+- Production practice: **1 day is the default — start there.** Go to 4–7 days only where a winning solution embodies real IP (trained policies, interactive strategies), and record why in HANDOFF.md. Match the delay to how expensive a genuine improvement is to produce — the more R&D a leap costs, the longer it should stay protected, but the burden of proof is on the longer window.
 
 **Submission fee — production default ≈ $0.70–1.00 (USD-denominated, paid in TAO); every active competition charges one.**
 
